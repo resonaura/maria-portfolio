@@ -1,0 +1,21 @@
+.art-placeholder {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  border: 1.5px dashed var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+  width: 100%;
+  color: var(--app-text-muted);
+
+  span {
+    padding: 0 20px;
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+  }
+}

@@ -1,0 +1,64 @@
+.artwork-slide {
+  display: block;
+  width: 100%;
+
+  .artwork-img-wrap {
+    position: relative;
+    width: 100%;
+    line-height: 0; // kill inline gap under img
+  }
+
+  .artwork-img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  // ── Quote overlay ─────────────────────────────────────────────────
+  // Positioned dynamically via JS — left/top/width/height set inline.
+  .quote-overlay {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    // debug: outline: 2px solid red;
+  }
+
+  // ── Ring: inline SVG fills overlay but renders text OUTSIDE via overflow:visible ──
+  .quote-ring {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;          // key: text at r=158 > half-viewBox(150) bleeds outside
+    animation: artwork-ring-spin 24s linear infinite;
+    transform-origin: 50% 50%;
+
+    // Typography set via SVG attributes in JSX so they scale with viewBox
+  }
+
+  // ── Inner text fills the full circle area (ring is outside now) ───
+  .quote-inner {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    // padding and font-size set inline via circle.radius
+
+    p {
+      margin: 0;
+      color: #f5f4ff;
+      font-weight: 600;
+      font-family: 'Outfit', 'Inter', sans-serif;
+      line-height: 1.55;
+    }
+  }
+
+}
+
+@keyframes artwork-ring-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

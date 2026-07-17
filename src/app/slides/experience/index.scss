@@ -1,0 +1,90 @@
+.experience-slide {
+  .slide-content {
+    margin: 0 auto;
+    padding: 100px 20px 60px;
+    width: 100%;
+    max-width: 1100px;
+    text-align: left;
+
+    h2 {
+      margin: 0 0 40px;
+      font-weight: 700;
+      font-size: 32px;
+    }
+  }
+
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    width: 100%;
+  }
+
+  .timeline-column {
+    display: flex;
+    position: relative;
+    flex: 1;
+    flex-direction: column;
+    gap: 30px;
+    padding-left: 24px;
+
+    &::before {
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      left: 5px;
+      background: var(--app-border);
+      width: 2px;
+      content: '';
+    }
+  }
+
+  .experience-card {
+    position: relative;
+
+    .dot {
+      position: absolute;
+      top: 6px;
+      left: -24px;
+      border-radius: 50%;
+      background: var(--app-text);
+      width: 12px;
+      height: 12px;
+    }
+
+    .role {
+      margin: 0;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .company {
+      margin: 4px 0 0;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .meta {
+      margin: 2px 0 0;
+      color: var(--app-text-muted);
+      font-size: 13px;
+    }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: var(--app-text-muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+  }
+
+  @include media_md {
+    .timeline {
+      flex-direction: row;
+      gap: 60px;
+    }
+  }
+}

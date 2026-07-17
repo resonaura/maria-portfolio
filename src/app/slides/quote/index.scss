@@ -1,0 +1,88 @@
+.quote-slide {
+  position: relative;
+  z-index: 1;
+  // Наезжаем на предыдущий слайд (artwork). Значение адаптивное —
+  // artwork масштабируется вместе с viewport, поэтому используем clamp().
+  // На мобилках перекрытие небольшое, на широких экранах — побольше.
+  // clamp(min, preferred, max) — значения от меньшего к большему
+  // -20vw на большинстве экранов даёт хорошее перекрытие
+  margin-top: clamp(-260px, -20vw, -80px);
+
+  .slide-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .quote-circle-wrap {
+    position: relative;
+    aspect-ratio: 1;
+    width: 100%;
+    max-width: 340px;
+  }
+
+  .rotating-text {
+    position: absolute;
+    animation: quote-spin 24s linear infinite;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+
+    text {
+      fill: var(--app-text);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+  }
+
+  .quote-circle {
+    display: flex;
+    position: absolute;
+    justify-content: center;
+    align-items: center;
+    inset: 15%;
+    border-radius: 50%;
+    background: #1c1a5e;
+    padding: 30px;
+    color: #f5f4ff;
+    text-align: center;
+
+    p {
+      margin: 0;
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+  }
+
+  .quote-illustration {
+    max-width: 320px;
+  }
+
+  @include media_lg {
+    .slide-content {
+      flex-direction: row;
+      justify-content: center;
+    }
+
+    .quote-circle-wrap {
+      max-width: 420px;
+    }
+  }
+}
+
+@keyframes quote-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

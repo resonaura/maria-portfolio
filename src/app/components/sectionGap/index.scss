@@ -1,0 +1,8 @@
+.section-gap {
+  width: 100%;
+  height: 80px;
+
+  @include media_lg {
+    height: 140px;
+  }
+}

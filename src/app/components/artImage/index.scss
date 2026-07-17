@@ -1,0 +1,50 @@
+.art-image {
+  position: relative;
+  border-radius: 12px;
+  width: 100%;
+  overflow: hidden;
+
+  img {
+    display: block;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &::before {
+    position: absolute;
+    animation: art-image-shimmer 1.4s ease infinite;
+    transition: opacity 0.3s ease;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      var(--app-surface) 25%,
+      var(--app-surface-strong) 37%,
+      var(--app-surface) 63%
+    );
+    background-size: 400% 100%;
+    content: '';
+  }
+
+  &.loaded {
+    img {
+      opacity: 1;
+    }
+
+    &::before {
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+}
+
+@keyframes art-image-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}

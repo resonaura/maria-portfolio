@@ -1,0 +1,66 @@
+#root .slides .intro-slide {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  text-align: center;
+
+  // The Three.js canvas sits at z-index: 0 (see .three-bg).
+  // All content must be above it.
+  .slide-content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+  }
+
+  h1 {
+    margin: 0 auto;
+    border-radius: 20px;
+    padding: 10px 30px;
+    width: fit-content;
+    font-weight: 500;
+    font-size: 44px;
+    line-height: 44px;
+    text-shadow: var(--intro-text-shadow);
+
+    @include media_sm {
+      font-size: 72px;
+      line-height: 72px;
+    }
+  }
+
+  p {
+    margin: 0 auto;
+    width: fit-content;
+  }
+
+  h2 {
+    margin: 0 auto;
+    border-radius: 10px;
+    padding: 5px 20px;
+    width: fit-content;
+    font-weight: 500;
+    font-size: 24px;
+    text-shadow: var(--intro-text-shadow);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-evenly;
+    gap: 10px;
+    margin-top: 20px;
+
+    @include media_sm {
+      justify-content: center;
+      gap: 20px;
+    }
+  }
+}
+
+[data-theme='dark'] #root .slides .intro-slide {
+  --intro-text-shadow: 0px 0px 20px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='light'] #root .slides .intro-slide {
+  --intro-text-shadow: 0px 0px 6px rgba(255, 255, 255, 0.6);
+}

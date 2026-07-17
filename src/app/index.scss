@@ -1,0 +1,42 @@
+:root {
+  background-color: var(--app-background);
+  color: var(--app-text);
+
+  color-scheme: light dark;
+  font-weight: 400;
+  line-height: 1.5;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  cursor: none;
+  overflow-x: hidden;
+
+  // The page scrolls via html/body only. .slides used to also be its own
+  // overflow-y: auto container — since its height tracks its content 1:1,
+  // any sub-pixel/transform overflow (e.g. framer-motion's not-yet-animated
+  // offscreen elements) made it independently scrollable too, showing a
+  // second scrollbar alongside the page's.
+  .slides {
+    .slide-content {
+      width: 100%;
+    }
+  }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 0;
+    padding: 0;
+  }
+}
