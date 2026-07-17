@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Image optimization cache (generated, never commit)
+apps/api/.cache/

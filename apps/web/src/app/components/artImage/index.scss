@@ -1,0 +1,9 @@
+.art-image {
+  position: relative;
+  border-radius: 12px;
+  width: 100%;
+  overflow: hidden;
+
+  // Loading treatment (LQIP blur-fade, breakpoint crossfade) is handled entirely by
+  // ProgressiveImage's own inline styles — this class only carries layout concerns.
+}
