@@ -98,9 +98,7 @@ export class SvgService {
           name: 'preset-default',
           params: {
             overrides: {
-              // Preserve ids that the front-end queries by name (e.g. #ring-target).
-              // All other generated ids are still shortened/removed as usual.
-              cleanupIds: { preservePrefixes: ['ring-'] },
+              cleanupIds: { preservePrefixes: ['ring-', 'cta-'] },
             },
           },
         },
