@@ -7,6 +7,7 @@ export interface ImageManifestEntry {
    * file is fetched fresh instead of served from the browser's long-lived
    * immutable cache under the old, unchanged URL. */
   contentHash: string;
+  contrastProfile: number[];
 }
 
 export interface ImageManifest {

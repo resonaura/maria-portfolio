@@ -25,3 +25,4 @@ dist-ssr
 
 # Image optimization cache (generated, never commit)
 apps/api/.cache/
+.turbo
