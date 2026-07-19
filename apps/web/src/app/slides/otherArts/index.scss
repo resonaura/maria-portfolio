@@ -6,6 +6,15 @@
   overflow-x: hidden;
   color: var(--app-text);
 
+  .full-bleed-container {
+    border-radius: 0;
+    width: 100%;
+
+    .art-image {
+      border-radius: 0;
+    }
+  }
+
   // Full-bleed intro band, flush against the previous section above it.
   .packaging-intro {
     background-color: #eaeaea;

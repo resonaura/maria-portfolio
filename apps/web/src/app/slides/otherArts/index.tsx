@@ -1,12 +1,26 @@
 import { motion } from 'framer-motion';
 import { ArtImage } from '../../components/artImage';
-import { fadeUp, fadeIn, viewportOnce } from '../../lib/motion';
+import { fadeIn, fadeUp, viewportOnce } from '../../lib/motion';
 
 import './index.scss';
 
 export function OtherArtsSlide() {
   return (
     <section className='other-arts-slide'>
+      <motion.div
+        className='full-bleed-container'
+        variants={fadeIn}
+        initial='hidden'
+        whileInView='visible'
+        viewport={viewportOnce}
+      >
+        <ArtImage
+          src='arts/3-5.svg'
+          alt='Section divider'
+          className='full-bleed-image'
+          aspectRatio='12000 / 303'
+        />
+      </motion.div>
       <motion.div
         className='packaging-intro'
         variants={fadeUp}
@@ -18,9 +32,9 @@ export function OtherArtsSlide() {
           <h3>Packaging based on "The Gift of the Magi"</h3>
           <p>
             Taking inspiration from O'Henry's "The Gift of the Magi", this
-            packaging explores the tapestries of human interactions, the
-            nature of care and sacrifice. Ultimately, it highlights the
-            eclectic nature of love and the irony of life.
+            packaging explores the tapestries of human interactions, the nature
+            of care and sacrifice. Ultimately, it highlights the eclectic nature
+            of love and the irony of life.
           </p>
         </div>
       </motion.div>

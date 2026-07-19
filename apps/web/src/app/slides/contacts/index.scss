@@ -7,6 +7,17 @@
   .contacts-hero-img {
     width: 100%;
 
+    // On mobile the artwork's native 18000/14125 ratio renders a short, wide
+    // strip, squeezing the overlaid contact card down with it. Crop in on
+    // width a little (preserveAspectRatio="xMidYMid slice" handles the actual
+    // cropping) so the card has more room; restore the full frame once there's
+    // enough viewport width for it not to matter.
+    aspect-ratio: 10 / 9 !important;
+
+    @include media_md {
+      aspect-ratio: 18000 / 14125 !important;
+    }
+
     // The artwork is drawn for a dark background — invert for light theme.
     [data-theme='light'] & {
       filter: invert(1);

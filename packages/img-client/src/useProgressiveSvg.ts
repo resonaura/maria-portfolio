@@ -77,6 +77,8 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
   const containerRef = useRef<HTMLDivElement | null>(null);
   const shellReadyRef = useRef(false);
   const requestTokenRef = useRef(0);
+  // Highest breakpoint width already patched into the live DOM for this src.
+  const appliedBpRef = useRef(0);
   const [ready, setReady] = useState(false);
 
   const setRef = useCallback(
@@ -92,6 +94,7 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
   useEffect(() => {
     shellReadyRef.current = false;
     setReady(false);
+    appliedBpRef.current = 0;
 
     const container = containerRef.current;
     if (!container || !lqip) return;
@@ -130,6 +133,16 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
     // tier — it already looks good, and a bad connection can't afford repeating
     // the download at full device-pixel-ratio size right after.
     const retinaBp = isSlow ? previewBp : pickBreakpoint(containerWidth, dpr, breakpoints);
+
+    // A resize-driven re-run (e.g. iOS Safari's toolbar hiding/showing on scroll,
+    // which nudges the layout viewport without the container actually needing a
+    // bigger image) can land here targeting no more than what's already patched
+    // into the DOM. Bail out instead of redoing the preview→retina dance — that
+    // would drop a variant already on screen back through the blurry preview for
+    // no gain, and on a slow connection could get stuck there if the next resize
+    // arrives before the retina fetch lands.
+    if (retinaBp <= appliedBpRef.current) return;
+
     const token = ++requestTokenRef.current;
 
     const applyVariant = (bp: number): Promise<boolean> =>
@@ -139,8 +152,17 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
           if (token !== requestTokenRef.current) return false; // superseded by a newer request
           const container = containerRef.current;
           if (!container) return false;
-          return patchImageHrefs(container, text);
+          const patched = patchImageHrefs(container, text);
+          if (patched) appliedBpRef.current = Math.max(appliedBpRef.current, bp);
+          return patched;
         });
+
+    if (previewBp <= appliedBpRef.current) {
+      // Already sharper than the preview tier from an earlier run — skip
+      // straight to retina instead of regressing through it.
+      applyVariant(retinaBp).catch(() => {});
+      return;
+    }
 
     applyVariant(previewBp)
       .then((patched) => {

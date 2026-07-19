@@ -24,13 +24,13 @@ export function MafiaSlide() {
         <p>
           While working at a print shop, I embarked on a project designing a
           deck of cards for a sports-themed version of the Mafia game. Our
-          client, a huge fan of the game, wanted each role to embody the
-          unique characteristics associated with them.
+          client, a huge fan of the game, wanted each role to embody the unique
+          characteristics associated with them.
         </p>
         <p>
           In approaching this, our team decided to represent each in-game role
-          with an animal, encapsulating their distinctive features and
-          bringing a new aesthetic to the game.
+          with an animal, encapsulating their distinctive features and bringing
+          a new aesthetic to the game.
         </p>
       </motion.div>
 
@@ -99,9 +99,9 @@ export function MafiaSlide() {
             <h4>The Rabbit</h4>
             <p>
               Nimble and wary by nature, rabbits can reach incredible speeds
-              running away from predators. Nature has its ways of protecting
-              the meek; in Mafia, you ought to be prompt in your argumentation
-              to stay alive.
+              running away from predators. Nature has its ways of protecting the
+              meek; in Mafia, you ought to be prompt in your argumentation to
+              stay alive.
             </p>
           </motion.div>
         </motion.div>
@@ -120,24 +120,6 @@ export function MafiaSlide() {
           wildlife. Different animals play different roles – just like in
           nature.
         </p>
-      </motion.div>
-
-      {/* Block 5: Vertical spacing + full-width divider line 3-5.svg */}
-      <div className='transparent-gap' aria-hidden='true' />
-
-      <motion.div
-        className='full-bleed-container'
-        variants={fadeIn}
-        initial='hidden'
-        whileInView='visible'
-        viewport={viewportOnce}
-      >
-        <ArtImage
-          src='arts/3-5.svg'
-          alt='Section divider'
-          className='full-bleed-image'
-          aspectRatio='12000 / 303'
-        />
       </motion.div>
     </section>
   );

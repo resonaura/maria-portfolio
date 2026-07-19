@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: -100px;
+  padding-bottom: 0;
   width: 100%;
   overflow-x: hidden;
   color: var(--app-text);
@@ -162,6 +162,7 @@
     }
 
     .highlighted-text {
+      margin-bottom: 30px;
       text-align: justify;
       text-align-last: left;
     }
