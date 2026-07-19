@@ -1,10 +1,30 @@
+.three-bg-stack {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
 .three-bg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 
-  // Sharp geometric look — no blur
-  pointer-events: none;
-  z-index: 0;
+  // Depth-of-field cue: layers further from the camera carry more blur. The
+  // front tier still gets a touch of blur so no fragment ever renders razor-
+  // sharp against the softer layers behind it (looked like a stray artifact).
+  &--front {
+    filter: blur(1px);
+  }
+
+  &--mid {
+    filter: blur(2px);
+  }
+
+  &--back {
+    filter: blur(4px);
+  }
 }

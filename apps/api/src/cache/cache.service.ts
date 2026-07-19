@@ -41,6 +41,10 @@ export class CacheService {
   private readonly logger = new Logger(CacheService.name);
   private readonly storageDir: string;
   private readonly cacheFilesDir: string;
+  /** Serializes all reconcile/remove/ensureVariant work per relativePath — a watcher
+   * event and an in-flight HTTP request can otherwise both see "no row/variant yet"
+   * and race to insert the same row, tripping a UNIQUE constraint. */
+  private readonly inFlightReconciles = new Map<string, Promise<unknown>>();
 
   constructor(
     @InjectRepository(SourceFile) private readonly sourceFiles: Repository<SourceFile>,
@@ -117,6 +121,12 @@ export class CacheService {
     return result.buffer;
   }
 
+  /** Cache files for a source live under a subfolder named after its relativePath,
+   * so the whole subfolder can be torn down in one shot when the source is removed. */
+  private variantDir(relativePath: string): string {
+    return path.join(this.cacheFilesDir, relativePath);
+  }
+
   private async generateVariant(
     sourceFile: SourceFile,
     fullSourcePath: string,
@@ -125,10 +135,15 @@ export class CacheService {
   ): Promise<CacheVariant> {
     const buffer = await this.writeVariantFile(fullSourcePath, spec);
     const safeKey = spec.key.replace(/[^a-z0-9]+/gi, '_');
-    const filename = `${sourceFile.contentHash}_${safeKey}.${spec.ext}`;
+    const baseFilename = `${sourceFile.contentHash}_${safeKey}.${spec.ext}`;
+    const dir = this.variantDir(sourceFile.relativePath);
+    const filename = path.join(sourceFile.relativePath, baseFilename);
 
-    await fs.mkdir(this.cacheFilesDir, { recursive: true });
-    await fs.writeFile(path.join(this.cacheFilesDir, filename), buffer);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, baseFilename), buffer);
+    this.logger.log(
+      `Wrote variant '${spec.key}' (${spec.format}${spec.width ? `, w${spec.width}` : ''}, ${buffer.length}B) for ${sourceFile.relativePath}`
+    );
 
     if (existingId) {
       await this.variants.update(existingId, {
@@ -154,34 +169,54 @@ export class CacheService {
 
   private async generateAllVariants(sourceFile: SourceFile, fullSourcePath: string): Promise<void> {
     const specs = this.expectedVariantSpecs(sourceFile.kind);
+    this.logger.log(`Generating ${specs.length} variant(s) for ${sourceFile.relativePath} (${sourceFile.kind})`);
     for (const spec of specs) {
       await this.generateVariant(sourceFile, fullSourcePath, spec);
     }
   }
 
-  /** Deletes cache files + DB rows for every variant of a source file. */
-  private async purgeVariants(sourceFileId: string): Promise<void> {
-    const existing = await this.variants.find({ where: { sourceFileId } });
-    await Promise.all(existing.map((v) => fs.rm(path.join(this.cacheFilesDir, v.filename), { force: true })));
-    if (existing.length > 0) {
-      await this.variants.delete({ sourceFileId });
-    }
+  /** Deletes cache files + DB rows for every variant of a source file, tearing down
+   * its whole cache subfolder rather than unlinking filenames one by one. */
+  private async purgeVariants(sourceFile: SourceFile): Promise<void> {
+    this.logger.log(`Purging cache for ${sourceFile.relativePath}`);
+    await this.variants.delete({ sourceFileId: sourceFile.id });
+    await fs.rm(this.variantDir(sourceFile.relativePath), { recursive: true, force: true });
+  }
+
+  /** Runs `fn` for `relativePath` after any in-flight reconcile/remove/ensureVariant
+   * call for the same path has settled, and queues later callers behind this one. */
+  private async withFileLock<T>(relativePath: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.inFlightReconciles.get(relativePath) ?? Promise.resolve();
+    const run = previous.then(fn, fn).finally(() => {
+      if (this.inFlightReconciles.get(relativePath) === run) {
+        this.inFlightReconciles.delete(relativePath);
+      }
+    });
+    this.inFlightReconciles.set(relativePath, run);
+    return run;
   }
 
   /**
    * Core reconciliation entry point. Idempotent — safe to call repeatedly for the
-   * same file (startup warmup, periodic sweep, and post-change watcher events all
-   * funnel through here).
+   * same file (startup warmup, periodic sweep, post-change watcher events, and
+   * request-time ensureVariant() lookups all funnel through here). Concurrent calls
+   * for the same relativePath are serialized to avoid racing on the same DB row.
    */
   async reconcileSourceFile(relativePath: string): Promise<void> {
+    return this.withFileLock(relativePath, () => this.doReconcileSourceFile(relativePath));
+  }
+
+  private async doReconcileSourceFile(relativePath: string): Promise<void> {
     const fullSourcePath = this.fullPath(relativePath);
     let stat: { size: number; mtimeMs: number };
     try {
       stat = await this.hasher.stat(fullSourcePath);
     } catch {
+      this.logger.warn(`Reconcile skipped, file vanished: ${relativePath}`);
       return; // file vanished between the fs event and this call
     }
 
+    this.logger.log(`Reconciling ${relativePath}`);
     const ext = path.extname(relativePath).toLowerCase();
     const row = await this.sourceFiles.findOne({ where: { relativePath } });
 
@@ -212,7 +247,7 @@ export class CacheService {
     if (hash !== row.contentHash) {
       // "если файл отличается от хешсумы то пересоздаём" — full invalidation + regen.
       this.logger.log(`Content changed, invalidating cache: ${relativePath}`);
-      await this.purgeVariants(row.id);
+      await this.purgeVariants(row);
       const { kind, intrinsic, lqip } = await this.classifyAndDescribe(fullSourcePath, ext);
       row.contentHash = hash;
       row.size = stat.size;
@@ -232,32 +267,79 @@ export class CacheService {
     const existing = await this.variants.find({ where: { sourceFileId: row.id } });
     const existingByKey = new Map(existing.map((v) => [v.variantKey, v]));
 
+    let restored = 0;
     for (const spec of specs) {
       const existingRow = existingByKey.get(spec.key);
       if (existingRow) {
         const onDisk = await fileExists(path.join(this.cacheFilesDir, existingRow.filename));
         if (onDisk) continue;
         await this.generateVariant(row, fullSourcePath, spec, existingRow.id);
+        restored++;
         this.logger.log(`Restored missing cache variant '${spec.key}' for ${relativePath}`);
       } else {
         await this.generateVariant(row, fullSourcePath, spec);
+        restored++;
       }
+    }
+    if (restored === 0) {
+      this.logger.log(`Unchanged, all ${specs.length} variant(s) already cached: ${relativePath}`);
     }
   }
 
   async removeSourceFile(relativePath: string): Promise<void> {
-    const row = await this.sourceFiles.findOne({ where: { relativePath } });
-    if (!row) return;
-    await this.purgeVariants(row.id);
-    await this.sourceFiles.delete({ id: row.id });
-    this.logger.log(`Removed from index: ${relativePath}`);
+    return this.withFileLock(relativePath, async () => {
+      const row = await this.sourceFiles.findOne({ where: { relativePath } });
+      if (!row) return;
+      await this.purgeVariants(row);
+      await this.sourceFiles.delete({ id: row.id });
+      this.logger.log(`Removed from index: ${relativePath}`);
+    });
   }
 
-  /** Re-checks every known source file. Catches out-of-band cache-file deletions with no fs event. */
+  /** Re-checks every known source file (catches out-of-band cache-file deletions with
+   * no fs event), then prunes any cache dir left behind by a source file that's gone. */
   async reconcileAll(): Promise<void> {
     const rows = await this.sourceFiles.find();
     for (const row of rows) {
       await this.reconcileSourceFile(row.relativePath);
+    }
+    await this.pruneOrphanedCacheDirs();
+  }
+
+  /** Recursively finds cache-file leaf directories — the per-source subfolders
+   * created by variantDir(), one level deeper than intermediate path segments. */
+  private async listLeafCacheDirs(dir: string): Promise<string[]> {
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    const subdirs = entries.filter((e) => e.isDirectory());
+    if (subdirs.length === 0) {
+      return dir === this.cacheFilesDir ? [] : [dir];
+    }
+    const leaves: string[] = [];
+    for (const sub of subdirs) {
+      leaves.push(...(await this.listLeafCacheDirs(path.join(dir, sub.name))));
+    }
+    return leaves;
+  }
+
+  /**
+   * Removes cache subfolders that don't correspond to any known source file — e.g. a
+   * file renamed/deleted while the server (and its fs watcher) wasn't running, so no
+   * `unlink` event ever fired to trigger removeSourceFile's cleanup.
+   */
+  private async pruneOrphanedCacheDirs(): Promise<void> {
+    const known = new Set((await this.sourceFiles.find()).map((r) => r.relativePath));
+    const leaves = await this.listLeafCacheDirs(this.cacheFilesDir);
+    for (const dir of leaves) {
+      const relativePath = path.relative(this.cacheFilesDir, dir);
+      if (!known.has(relativePath)) {
+        this.logger.log(`Pruning orphaned cache dir (no matching source file): ${relativePath}`);
+        await fs.rm(dir, { recursive: true, force: true });
+      }
     }
   }
 
@@ -269,7 +351,8 @@ export class CacheService {
         lqip: row.lqip,
         breakpoints: row.kind === 'svg-vector' ? [] : [...BREAKPOINTS],
         type: row.kind,
-        intrinsic: { w: row.width, h: row.height }
+        intrinsic: { w: row.width, h: row.height },
+        contentHash: row.contentHash
       };
     }
     return manifest;
@@ -287,55 +370,63 @@ export class CacheService {
     const fullSourcePath = this.fullPath(relativePath);
     await fs.access(fullSourcePath);
 
-    let row = await this.sourceFiles.findOne({ where: { relativePath } });
-    if (!row) {
-      await this.reconcileSourceFile(relativePath);
-      row = await this.sourceFiles.findOne({ where: { relativePath } });
-      if (!row) throw new Error(`Failed to index ${relativePath}`);
-    }
-
-    const ext = path.extname(relativePath).toLowerCase();
-    const isSvg = ext === '.svg';
-    const isVector = isSvg && row.kind === 'svg-vector';
-
-    const spec: VariantSpec = isVector
-      ? { key: 'vector', format: 'vector', width: null, quality: null, ext: 'svg' }
-      : isSvg
-        ? {
-            key: this.hasher.variantKey({ w: request.width, f: 'svg' }),
-            format: 'svg',
-            width: request.width ?? BREAKPOINTS[0],
-            quality: request.quality ?? DEFAULT_QUALITY,
-            ext: 'svg'
-          }
-        : {
-            key: this.hasher.variantKey({ w: request.width, f: request.format, q: request.quality ?? DEFAULT_QUALITY }),
-            format: request.format ?? 'webp',
-            width: request.width ?? null,
-            quality: request.quality ?? DEFAULT_QUALITY,
-            ext: request.format ?? 'webp'
-          };
-
-    let variant = await this.variants.findOne({ where: { sourceFileId: row.id, variantKey: spec.key } });
-    if (variant) {
-      const filePath = path.join(this.cacheFilesDir, variant.filename);
-      if (await fileExists(filePath)) {
-        return {
-          buffer: await fs.readFile(filePath),
-          mime: MIME_BY_FORMAT[variant.format],
-          sourceHash: row.contentHash,
-          variantKey: variant.variantKey
-        };
+    // Shares the same per-path lock as reconcileSourceFile/removeSourceFile, so a
+    // request landing mid-reconcile can't race the watcher to insert the same
+    // cache_variants row. Calls doReconcileSourceFile (not the public, lock-taking
+    // wrapper) below to avoid deadlocking on its own lock re-entrantly.
+    return this.withFileLock(relativePath, async () => {
+      let row = await this.sourceFiles.findOne({ where: { relativePath } });
+      if (!row) {
+        await this.doReconcileSourceFile(relativePath);
+        row = await this.sourceFiles.findOne({ where: { relativePath } });
+        if (!row) throw new Error(`Failed to index ${relativePath}`);
       }
-    }
 
-    variant = await this.generateVariant(row, fullSourcePath, spec, variant?.id);
-    const filePath = path.join(this.cacheFilesDir, variant.filename);
-    return {
-      buffer: await fs.readFile(filePath),
-      mime: MIME_BY_FORMAT[variant.format],
-      sourceHash: row.contentHash,
-      variantKey: variant.variantKey
-    };
+      const ext = path.extname(relativePath).toLowerCase();
+      const isSvg = ext === '.svg';
+      const isVector = isSvg && row.kind === 'svg-vector';
+
+      const spec: VariantSpec = isVector
+        ? { key: 'vector', format: 'vector', width: null, quality: null, ext: 'svg' }
+        : isSvg
+          ? {
+              key: this.hasher.variantKey({ w: request.width, f: 'svg' }),
+              format: 'svg',
+              width: request.width ?? BREAKPOINTS[0],
+              quality: request.quality ?? DEFAULT_QUALITY,
+              ext: 'svg'
+            }
+          : {
+              key: this.hasher.variantKey({ w: request.width, f: request.format, q: request.quality ?? DEFAULT_QUALITY }),
+              format: request.format ?? 'webp',
+              width: request.width ?? null,
+              quality: request.quality ?? DEFAULT_QUALITY,
+              ext: request.format ?? 'webp'
+            };
+
+      let variant = await this.variants.findOne({ where: { sourceFileId: row.id, variantKey: spec.key } });
+      if (variant) {
+        const filePath = path.join(this.cacheFilesDir, variant.filename);
+        if (await fileExists(filePath)) {
+          this.logger.debug(`Cache hit '${spec.key}' for ${relativePath}`);
+          return {
+            buffer: await fs.readFile(filePath),
+            mime: MIME_BY_FORMAT[variant.format],
+            sourceHash: row.contentHash,
+            variantKey: variant.variantKey
+          };
+        }
+      }
+
+      this.logger.log(`Cache miss '${spec.key}' for ${relativePath}, generating on request`);
+      variant = await this.generateVariant(row, fullSourcePath, spec, variant?.id);
+      const filePath = path.join(this.cacheFilesDir, variant.filename);
+      return {
+        buffer: await fs.readFile(filePath),
+        mime: MIME_BY_FORMAT[variant.format],
+        sourceHash: row.contentHash,
+        variantKey: variant.variantKey
+      };
+    });
   }
 }

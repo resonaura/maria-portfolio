@@ -4,6 +4,7 @@ export * from './aspectRatio.js';
 export * from './breakpoint.js';
 export * from './useDevicePixelRatio.js';
 export * from './useElementWidth.js';
+export * from './useNetworkQuality.js';
 export * from './useProgressiveImage.js';
 export * from './useProgressiveSvg.js';
 export * from './ProgressiveImage.js';

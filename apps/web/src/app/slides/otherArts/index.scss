@@ -1,0 +1,84 @@
+.other-arts-slide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: var(--app-background);
+  width: 100%;
+  overflow-x: hidden;
+  color: var(--app-text);
+
+  // Full-bleed intro band, flush against the previous section above it.
+  .packaging-intro {
+    background-color: #eaeaea;
+    width: 100%;
+
+    .packaging-intro-inner {
+      box-sizing: border-box;
+      margin: 0 auto;
+      padding: 40px 24px;
+      width: 100%;
+      max-width: 800px;
+
+      @include media_lg {
+        padding: 64px 24px;
+      }
+    }
+
+    h3 {
+      margin: 0 0 20px;
+      margin-top: 100px;
+      color: #17171a;
+      font-weight: 700;
+      font-size: 42px;
+      line-height: 44px;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    p {
+      margin: 0;
+      color: #17171a;
+      font-size: 15px;
+      line-height: 1.7;
+      font-family: 'Montserrat', sans-serif;
+      text-align: justify;
+      text-align-last: left;
+
+      @include media_md {
+        font-size: 16px;
+        line-height: 1.8;
+      }
+    }
+  }
+
+  .poster-container {
+    margin-bottom: 60px;
+    width: 100%;
+
+    @include media_lg {
+      margin-bottom: 100px;
+    }
+
+    .poster-image {
+      border-radius: 0 !important;
+      width: 100%;
+    }
+  }
+
+  // Softens the hard cut from the gray intro band into the image below it. A real,
+  // later-painted element rather than a ::before — guaranteed to sit on top of the
+  // image regardless of any stacking context the image's own container sets up.
+  .poster-container--fade-top {
+    position: relative;
+
+    .fade-overlay {
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      z-index: 5;
+      background: linear-gradient(to bottom, #eaeaea, transparent);
+      height: 200px;
+      pointer-events: none;
+    }
+  }
+}

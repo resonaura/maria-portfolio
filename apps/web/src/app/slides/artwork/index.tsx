@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { ProgressiveImage } from '@maria-portfolio/img-client';
-import { fadeIn, viewportOnce } from '../../lib/motion';
+import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { useSvgCirclePosition } from '../../hooks/useSvgCirclePosition';
+import { fadeIn, viewportOnce } from '../../lib/motion';
 import './index.scss';
 
 export interface IArtworkSlide {
@@ -10,13 +10,19 @@ export interface IArtworkSlide {
 }
 
 // ── Ring constants ────────────────────────────────────────────────────────────
-const RING_R    = 158;   // SVG units, radius in 300×300 viewBox
-const RING_CX   = 150;
-const RING_CY   = 150;
+const RING_R = 158; // SVG units, radius in 300×300 viewBox
+const RING_CX = 150;
+const RING_CY = 150;
 const RING_REPS = 5;
-const ROTATING_LABEL = Array(RING_REPS).fill('GRAPHIC DESIGNER').join(' • ') + ' • ';
+const ROTATING_LABEL =
+  Array(RING_REPS).fill('GRAPHIC DESIGNER').join(' • ') + ' • ';
 
-interface CharData { char: string; x: number; y: number; rotate: number }
+interface CharData {
+  char: string;
+  x: number;
+  y: number;
+  rotate: number;
+}
 
 /**
  * Fallback: equal angular spacing (used before fonts load).
@@ -27,7 +33,12 @@ function buildEqual(): CharData[] {
   return chars.map((char, i) => {
     const deg = -90 + (i / n) * 360;
     const rad = (deg * Math.PI) / 180;
-    return { char, x: RING_CX + RING_R * Math.cos(rad), y: RING_CY + RING_R * Math.sin(rad), rotate: deg + 90 };
+    return {
+      char,
+      x: RING_CX + RING_R * Math.cos(rad),
+      y: RING_CY + RING_R * Math.sin(rad),
+      rotate: deg + 90
+    };
   });
 }
 
@@ -42,18 +53,23 @@ function buildMeasured(): CharData[] {
   ctx.font = '700 200px Outfit, Inter, sans-serif';
 
   const chars = [...ROTATING_LABEL];
-  const widths = chars.map(c => ctx.measureText(c).width);
+  const widths = chars.map((c) => ctx.measureText(c).width);
   const totalWidth = widths.reduce((s, w) => s + w, 0);
   const circum = 2 * Math.PI * RING_R;
 
   let arc = 0;
   return chars.map((char, i) => {
     const seg = (widths[i] / totalWidth) * circum; // arc segment for this char
-    const centre = arc + seg / 2;                   // centre of segment
+    const centre = arc + seg / 2; // centre of segment
     const deg = -90 + (centre / circum) * 360;
     const rad = (deg * Math.PI) / 180;
     arc += seg;
-    return { char, x: RING_CX + RING_R * Math.cos(rad), y: RING_CY + RING_R * Math.sin(rad), rotate: deg + 90 };
+    return {
+      char,
+      x: RING_CX + RING_R * Math.cos(rad),
+      y: RING_CY + RING_R * Math.sin(rad),
+      rotate: deg + 90
+    };
   });
 }
 
@@ -76,7 +92,7 @@ export function ArtworkSlide({ label }: IArtworkSlide) {
   }, []);
 
   const innerFontSize = Math.max(9, circle.radius * 0.088);
-  const innerPadding  = Math.max(8, circle.radius * 0.16);
+  const innerPadding = Math.max(8, circle.radius * 0.16);
 
   return (
     <motion.section
@@ -89,7 +105,7 @@ export function ArtworkSlide({ label }: IArtworkSlide) {
       <div className='artwork-img-wrap'>
         <ProgressiveImage
           ref={circleRef}
-          src='arts/1.svg'
+          src='arts/1-1.svg'
           alt={label}
           className='artwork-img'
         />
@@ -98,10 +114,10 @@ export function ArtworkSlide({ label }: IArtworkSlide) {
           <div
             className='quote-overlay'
             style={{
-              left:   circle.left   - circle.radius,
-              top:    circle.top    - circle.radius,
-              width:  circle.radius * 2,
-              height: circle.radius * 2,
+              left: circle.left - circle.radius,
+              top: circle.top - circle.radius,
+              width: circle.radius * 2,
+              height: circle.radius * 2
             }}
           >
             {/*
@@ -133,15 +149,11 @@ export function ArtworkSlide({ label }: IArtworkSlide) {
             </svg>
 
             {/* Inner quote text – font-size and padding derived from radius */}
-            <div
-              className='quote-inner'
-              style={{ padding: innerPadding }}
-            >
+            <div className='quote-inner' style={{ padding: innerPadding }}>
               <p style={{ fontSize: innerFontSize }}>
-                I love to create. I believe in taking even small
-                opportunities. Every project I took part in has changed me,
-                tought me something and aided my growth on my professional
-                journey.
+                I love to create. I believe in taking even small opportunities.
+                Every project I took part in has changed me, tought me something
+                and aided my growth on my professional journey.
               </p>
             </div>
           </div>

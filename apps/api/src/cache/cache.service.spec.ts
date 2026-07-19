@@ -74,7 +74,9 @@ describe('CacheService reconciliation', () => {
     })
       .png()
       .toBuffer();
-    await fs.writeFile(path.join(storageDir, relativePath), buffer);
+    const fullPath = path.join(storageDir, relativePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, buffer);
   }
 
   it('indexes a brand-new raster file and generates the full breakpoint x format variant set', async () => {
@@ -201,5 +203,86 @@ describe('CacheService reconciliation', () => {
         .catch(() => false);
       expect(stillExists).toBe(false);
     }
+  });
+
+  it('nests cache files under a per-source subfolder and removes that whole folder on delete', async () => {
+    await writeFixturePng('nested/photo.png');
+    await cacheService.reconcileSourceFile('nested/photo.png');
+
+    const source = await sourceRepo.findOne({ where: { relativePath: 'nested/photo.png' } });
+    const variants = await variantRepo.find({ where: { sourceFileId: source!.id } });
+    expect(variants.length).toBeGreaterThan(0);
+    for (const variant of variants) {
+      expect(variant.filename.startsWith(`nested${path.sep}photo.png${path.sep}`)).toBe(true);
+    }
+
+    const sourceDir = path.join(cacheFilesDir, 'nested', 'photo.png');
+    expect(await fs.access(sourceDir).then(() => true).catch(() => false)).toBe(true);
+
+    await cacheService.removeSourceFile('nested/photo.png');
+
+    expect(await fs.access(sourceDir).then(() => true).catch(() => false)).toBe(false);
+  });
+
+  it('coalesces concurrent reconciles of a brand-new file instead of racing to double-insert', async () => {
+    await writeFixturePng('racey.png');
+
+    // Two callers both discover "no row yet" for the same relativePath at once —
+    // this used to trip a UNIQUE(relativePath) constraint before reconciles were
+    // serialized per path.
+    await Promise.all([
+      cacheService.reconcileSourceFile('racey.png'),
+      cacheService.reconcileSourceFile('racey.png')
+    ]);
+
+    const sources = await sourceRepo.find({ where: { relativePath: 'racey.png' } });
+    expect(sources).toHaveLength(1);
+
+    const variants = await variantRepo.find({ where: { sourceFileId: sources[0].id } });
+    expect(variants).toHaveLength(EXPECTED_RASTER_VARIANTS);
+  });
+
+  it('coalesces a request-time ensureVariant racing a watcher-driven reconcile of the same new file', async () => {
+    await writeFixturePng('requested.png');
+
+    // ensureVariant used to run its own generateVariant() outside the per-path lock,
+    // so a page load hitting a brand-new file at the same moment the watcher was
+    // reconciling it could both try to INSERT the same cache_variants row —
+    // UNIQUE(sourceFileId, variantKey) constraint failure.
+    const [resolved] = await Promise.all([
+      cacheService.ensureVariant('requested.png', { width: 640, format: 'webp' }),
+      cacheService.reconcileSourceFile('requested.png')
+    ]);
+
+    expect(resolved.buffer.length).toBeGreaterThan(0);
+
+    const sources = await sourceRepo.find({ where: { relativePath: 'requested.png' } });
+    expect(sources).toHaveLength(1);
+
+    const variants = await variantRepo.find({ where: { sourceFileId: sources[0].id } });
+    const keys = variants.map((v) => v.variantKey);
+    expect(new Set(keys).size).toBe(keys.length); // no duplicate variantKey rows
+  });
+
+  it('prunes a leftover cache dir for a source file that vanished with no unlink event', async () => {
+    await writeFixturePng('arts/gone.png');
+    await cacheService.reconcileSourceFile('arts/gone.png');
+
+    const orphanDir = path.join(cacheFilesDir, 'arts', 'gone.png');
+    expect(await fs.access(orphanDir).then(() => true).catch(() => false)).toBe(true);
+
+    // Simulate the file being renamed/deleted while the server (and its fs watcher)
+    // wasn't running: the DB row is removed directly, without going through
+    // removeSourceFile, so no cache cleanup has happened yet — mirrors a stale
+    // cache dir surviving a rename that happened offline.
+    const source = await sourceRepo.findOne({ where: { relativePath: 'arts/gone.png' } });
+    await variantRepo.delete({ sourceFileId: source!.id });
+    await sourceRepo.delete({ id: source!.id });
+
+    expect(await fs.access(orphanDir).then(() => true).catch(() => false)).toBe(true);
+
+    await cacheService.reconcileAll();
+
+    expect(await fs.access(orphanDir).then(() => true).catch(() => false)).toBe(false);
   });
 });

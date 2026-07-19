@@ -19,7 +19,7 @@ export function IntroSlide() {
 
   return (
     <Slide className={'intro-slide'}>
-      {/* Three.js aurora/ink-wash background — z-index 0, CSS-blurred */}
+      {/* Three.js low-poly cityscape background — z-index 0, far layers CSS-blurred by depth */}
       <ThreeBackground />
 
       <div className='slide-content'>

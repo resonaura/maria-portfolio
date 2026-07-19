@@ -62,9 +62,14 @@ export class SvgService {
         const newWidth = Math.min(targetWidth, origWidth);
 
         const format = raster.mime.includes('jpeg') || raster.mime.includes('jpg') ? 'jpeg' : 'webp';
+        // smartSubsample/mozjpeg spend extra encode time preserving chroma detail at
+        // sharp edges (text, thin lines) instead of subsampling uniformly — that's
+        // where lossy compression visibly smears text first.
+        const formatOptions =
+          format === 'webp' ? { quality, smartSubsample: true } : { quality, mozjpeg: true };
         const optimizedBuffer = await sharp(buffer)
           .resize({ width: newWidth, withoutEnlargement: true })
-          .toFormat(format, { quality })
+          .toFormat(format, formatOptions)
           .toBuffer();
 
         const newDataUri = `data:image/${format};base64,${optimizedBuffer.toString('base64')}`;
@@ -88,7 +93,20 @@ export class SvgService {
    */
   minifyVector(svgContent: string): string {
     try {
-      const plugins: PluginConfig[] = ['preset-default', 'removeScripts', { name: 'removeAttrs', params: { attrs: 'on\\w+' } }];
+      const plugins: PluginConfig[] = [
+        {
+          name: 'preset-default',
+          params: {
+            overrides: {
+              // Preserve ids that the front-end queries by name (e.g. #ring-target).
+              // All other generated ids are still shortened/removed as usual.
+              cleanupIds: { preservePrefixes: ['ring-'] },
+            },
+          },
+        },
+        'removeScripts',
+        { name: 'removeAttrs', params: { attrs: 'on\\w+' } },
+      ];
       const result = optimize(svgContent, { multipass: true, plugins });
       return result.data;
     } catch (error) {

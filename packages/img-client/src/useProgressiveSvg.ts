@@ -3,6 +3,7 @@ import { pickBreakpoint } from './breakpoint.js';
 import { useImgManifest } from './context.js';
 import { useDevicePixelRatio } from './useDevicePixelRatio.js';
 import { useElementWidth } from './useElementWidth.js';
+import { useNetworkQuality } from './useNetworkQuality.js';
 
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
@@ -67,9 +68,11 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
   const entry = manifest[src];
   const lqip = entry?.lqip ?? '';
   const breakpoints = entry?.breakpoints ?? [];
+  const contentHash = entry?.contentHash;
 
   const { ref: widthRef, width: containerWidth } = useElementWidth(debounceMs);
   const dpr = useDevicePixelRatio();
+  const { isSlow } = useNetworkQuality();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const shellReadyRef = useRef(false);
@@ -112,34 +115,50 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
     shellReadyRef.current = true;
   }, [src, lqip, alt]);
 
-  // Breakpoint upgrades: fetch as text, patch in place.
+  // Breakpoint upgrades: fetch as text, patch in place. Loads the 1x variant first
+  // (much smaller than the full device-pixel-ratio one, so it's visibly sharper
+  // than the LQIP well before the retina version would otherwise land), then
+  // silently upgrades to the full-DPR variant — patching hrefs in place has no
+  // reflow, so the upgrade is imperceptible other than becoming sharper.
   useEffect(() => {
     if (!manifestLoaded || containerWidth === null || !shellReadyRef.current) return;
     if (breakpoints.length === 0) return;
 
-    const bp = pickBreakpoint(containerWidth, dpr, breakpoints);
-    const url = `/img/${src}?w=${bp}`;
+    const suffix = contentHash ? `&v=${contentHash}` : '';
+    const previewBp = pickBreakpoint(containerWidth, 1, breakpoints);
+    // On a flagged data-saver mode or 2G-class connection, stay at the light 1x
+    // tier — it already looks good, and a bad connection can't afford repeating
+    // the download at full device-pixel-ratio size right after.
+    const retinaBp = isSlow ? previewBp : pickBreakpoint(containerWidth, dpr, breakpoints);
     const token = ++requestTokenRef.current;
 
-    fetch(url)
-      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
-      .then((text) => {
-        if (token !== requestTokenRef.current) return; // superseded by a newer breakpoint request
-        const container = containerRef.current;
-        if (!container) return;
-        if (patchImageHrefs(container, text)) {
-          const root = container.firstElementChild as HTMLElement | null;
-          if (root) {
-            root.style.filter = 'blur(0px)';
-            root.style.transform = 'scale(1)';
-          }
-          setReady(true);
+    const applyVariant = (bp: number): Promise<boolean> =>
+      fetch(`/img/${src}?w=${bp}${suffix}`)
+        .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
+        .then((text) => {
+          if (token !== requestTokenRef.current) return false; // superseded by a newer request
+          const container = containerRef.current;
+          if (!container) return false;
+          return patchImageHrefs(container, text);
+        });
+
+    applyVariant(previewBp)
+      .then((patched) => {
+        if (!patched || token !== requestTokenRef.current) return;
+        const root = containerRef.current?.firstElementChild as HTMLElement | null;
+        if (root) {
+          root.style.filter = 'blur(0px)';
+          root.style.transform = 'scale(1)';
         }
+        setReady(true);
+
+        if (retinaBp === previewBp) return; // 1x is already the best available size
+        return applyVariant(retinaBp).then(() => undefined);
       })
       .catch(() => {
         // Source likely deleted/unreachable — keep whatever is already rendered.
       });
-  }, [src, containerWidth, dpr, breakpoints, manifestLoaded]);
+  }, [src, containerWidth, dpr, breakpoints, contentHash, isSlow, manifestLoaded]);
 
   return { ref: setRef, ready, hasLqip: Boolean(lqip), intrinsic: entry?.intrinsic };
 }

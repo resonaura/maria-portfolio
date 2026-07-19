@@ -2,22 +2,39 @@ import { Injectable } from '@nestjs/common';
 import sharp from 'sharp';
 import { IntrinsicSize, OptimizeOptions, OptimizedAsset } from './types.js';
 
+// WebP hard-caps each dimension at 16383px, and AVIF encoding gets unreasonably slow
+// well before that too. A source with an extreme aspect ratio (e.g. a long vertical
+// scroll graphic) can blow past that on the *unconstrained* axis even at a modest
+// requested width, so every breakpoint resize is capped on both axes, not just width.
+const MAX_OUTPUT_DIMENSION = 16000;
+
 @Injectable()
 export class OptimizerService {
   async optimizeRaster(filePath: string, options: OptimizeOptions): Promise<OptimizedAsset> {
     const pipeline = sharp(filePath);
 
     if (options.width) {
-      pipeline.resize({ width: options.width, withoutEnlargement: true });
+      pipeline.resize({
+        width: options.width,
+        height: MAX_OUTPUT_DIMENSION,
+        fit: 'inside',
+        withoutEnlargement: true
+      });
     }
 
     const format = options.format ?? 'webp';
     const quality = options.quality ?? 80;
 
     if (format === 'avif') {
-      pipeline.avif({ quality, effort: 4 });
+      // chromaSubsampling: '4:4:4' keeps full color resolution at sharp edges (text,
+      // thin lines) — the default 4:2:0 halves it, which is where lossy compression
+      // visibly smears text first, well before luma detail is affected.
+      pipeline.avif({ quality, effort: 6, chromaSubsampling: '4:4:4' });
     } else if (format === 'webp') {
-      pipeline.webp({ quality, effort: 4 });
+      // smartSubsample spends extra encode time finding better chroma placement
+      // specifically around sharp edges instead of subsampling uniformly — same
+      // goal as AVIF's 4:4:4 above, without doubling chroma data everywhere.
+      pipeline.webp({ quality, effort: 6, smartSubsample: true });
     } else if (format === 'png') {
       pipeline.png({ quality, compressionLevel: 8 });
     } else {

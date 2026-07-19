@@ -17,7 +17,7 @@ function containerStyle(aspectRatio: string | undefined, style: React.CSSPropert
     position: 'relative',
     overflow: 'hidden',
     aspectRatio,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: 'transparent',
     ...style
   };
 }
@@ -121,11 +121,12 @@ const VectorSvgImage = forwardRef<HTMLDivElement, ProgressiveImageProps>(functio
 ) {
   const { manifest } = useImgManifest();
   const [loaded, setLoaded] = useState(false);
+  const contentHash = manifest[src]?.contentHash;
   const resolvedAspectRatio = aspectRatio ?? intrinsicAspectRatio(manifest[src]?.intrinsic);
   return (
     <div ref={forwardedRef} className={`progressive-image-container ${className}`} style={containerStyle(resolvedAspectRatio, style)}>
       <img
-        src={`/img/${src}`}
+        src={`/img/${src}${contentHash ? `?v=${contentHash}` : ''}`}
         alt={alt}
         decoding="async"
         onLoad={() => setLoaded(true)}

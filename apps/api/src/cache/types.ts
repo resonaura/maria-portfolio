@@ -13,6 +13,10 @@ export interface ManifestEntry {
   breakpoints: number[];
   type: SourceFileKind;
   intrinsic: { w: number | null; h: number | null };
+  /** Content hash, appended to image URLs as a cache-busting query param so a
+   * changed source file is fetched fresh instead of served from the browser's
+   * long-lived immutable cache under the old, unchanged URL. */
+  contentHash: string;
 }
 
 export type ImageManifest = Record<string, ManifestEntry>;

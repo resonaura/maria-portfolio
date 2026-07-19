@@ -21,11 +21,10 @@ function parseViewBox(svg: SVGSVGElement): { w: number; h: number } | null {
 }
 
 /**
- * Locates the decorative circular silhouette baked into the art SVG itself (the
- * illustration's outer <clipPath> — a rounded "dome" shape whose diameter equals
- * its bounding box width) and reports where it lands on screen, so the rotating
- * quote ring can wrap around it. No hardcoded coordinates: the artwork is the
- * source of truth, read live from the rendered inline SVG (see useProgressiveSvg).
+ * Locates the dark-blue decorative circle in the artwork SVG (the element with
+ * `id="ring-target"`) and reports where it lands on screen, so the rotating
+ * quote ring can be positioned directly on top of it. Falls back to the first
+ * `clipPath > *` child for any artwork that pre-dates the id convention.
  *
  * Returns a callback ref (not a RefObject) deliberately: ProgressiveImage's type
  * dispatcher (raster vs vector vs inline-svg) mounts a genuinely different
@@ -46,31 +45,36 @@ export function useSvgCirclePosition(): [SvgCirclePosition, (node: HTMLElement |
 
     const compute = () => {
       const svg = container.querySelector('svg');
-      const clipShape = svg?.querySelector('clipPath > *') as SVGGraphicsElement | null;
-      if (!svg || !clipShape) return;
+      // Target the specific dark-blue decorative circle marked in the artwork SVG.
+      // Falls back to the first clipPath child for backwards-compat with other artwork.
+      const ringTarget =
+        (svg?.querySelector('#ring-target') as SVGGraphicsElement | null) ??
+        (svg?.querySelector('clipPath > *') as SVGGraphicsElement | null);
+      if (!svg || !ringTarget) return;
 
       const viewBox = parseViewBox(svg);
       if (!viewBox) return;
 
       let bbox: DOMRect;
       try {
-        bbox = clipShape.getBBox();
+        bbox = ringTarget.getBBox();
       } catch {
         return; // element not laid out yet
       }
       if (!bbox.width) return;
 
-      const cx = bbox.x + bbox.width / 2;
-      const cy = bbox.y + bbox.width / 2; // dome's diameter == its bbox width
+      // The target is a perfect circle: radius = half bbox width,
+      // centre = (bbox.x + r, bbox.y + r).
       const r = bbox.width / 2;
+      const cx = bbox.x + r;
+      const cy = bbox.y + r;
 
       const containerRect = container.getBoundingClientRect();
       if (!containerRect.width || !containerRect.height) return;
 
-      // The rendered <svg> uses preserveAspectRatio="xMidYMid slice" (uniform scale,
-      // centered, cropped to cover) — mirror that math rather than assuming a plain
-      // non-uniform stretch, so this stays correct even if the container's aspect
-      // ratio doesn't exactly match the art's intrinsic aspect ratio.
+      // useProgressiveSvg sets preserveAspectRatio="xMidYMid slice" on the <svg>
+      // element at mount — uniform scale to cover the container (like object-fit:cover).
+      // Math.max mirrors that: scale by whichever axis fills the container first.
       const scale = Math.max(containerRect.width / viewBox.w, containerRect.height / viewBox.h);
       const offsetX = (containerRect.width - viewBox.w * scale) / 2;
       const offsetY = (containerRect.height - viewBox.h * scale) / 2;

@@ -37,13 +37,19 @@ export class WatcherService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.watcher
-      .on('add', (relativePath) => this.handleUpsert(relativePath))
-      .on('change', (relativePath) => this.handleUpsert(relativePath))
+      .on('add', (relativePath) => this.handleUpsert('add', relativePath))
+      .on('change', (relativePath) => this.handleUpsert('change', relativePath))
       .on('unlink', (relativePath) => this.handleUnlink(relativePath))
       .on('error', (error) => this.logger.error(`Watcher error: ${(error as Error).message}`))
       .on('ready', () => {
         this.ready = true;
         this.logger.log(`Initial cache warmup complete, watching: ${this.storageDir}`);
+        // Prunes cache dirs for files renamed/deleted while the server (and thus this
+        // watcher) wasn't running to catch the `unlink` event — don't wait a full hour
+        // for the periodic sweep to clean those up.
+        this.cache
+          .reconcileAll()
+          .catch((error) => this.logger.error(`Startup reconcile sweep failed: ${(error as Error).message}`));
       });
   }
 
@@ -51,13 +57,15 @@ export class WatcherService implements OnModuleInit, OnModuleDestroy {
     await this.watcher?.close();
   }
 
-  private handleUpsert(relativePath: string): void {
+  private handleUpsert(event: 'add' | 'change', relativePath: string): void {
+    this.logger.log(`fs ${event}: ${relativePath}`);
     this.cache
       .reconcileSourceFile(relativePath)
       .catch((error) => this.logger.error(`Failed to reconcile ${relativePath}: ${(error as Error).message}`));
   }
 
   private handleUnlink(relativePath: string): void {
+    this.logger.log(`fs unlink: ${relativePath}`);
     this.cache
       .removeSourceFile(relativePath)
       .catch((error) => this.logger.error(`Failed to remove ${relativePath}: ${(error as Error).message}`));

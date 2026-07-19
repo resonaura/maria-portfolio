@@ -2,7 +2,7 @@
   "name": "@maria-portfolio/root",
   "private": true,
   "version": "0.0.0",
-  "packageManager": "pnpm@10.30.3",
+  "packageManager": "pnpm@11.15.0",
   "engines": {
     "node": ">=24 <25"
   },
@@ -19,8 +19,5 @@
     "prettier-plugin-css-order": "^2.2.0",
     "turbo": "^2.5.4",
     "typescript": "^6.0.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3"]
   }
 }
