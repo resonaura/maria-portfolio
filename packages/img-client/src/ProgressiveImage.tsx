@@ -1,8 +1,13 @@
 import React, { forwardRef, useEffect, useRef, useState } from 'react';
 import { intrinsicAspectRatio } from './aspectRatio.js';
 import { useImgManifest } from './context.js';
+import { isSafari } from './isSafari.js';
 import { useProgressiveImage } from './useProgressiveImage.js';
 import { useProgressiveSvg } from './useProgressiveSvg.js';
+
+// UA doesn't change mid-session — computed once at module load, same pattern
+// as the skeleton keyframes below.
+const IS_SAFARI = isSafari();
 
 export interface ProgressiveImageProps {
   src: string;
@@ -54,6 +59,14 @@ function containerStyle(
 ): React.CSSProperties {
   return {
     position: 'relative',
+    // `position: relative` alone does NOT open a new stacking context — without
+    // an explicit z-index here too, the internal z-indexed layers below (LQIP/
+    // current/pending img) leak out and stack directly against whatever sibling
+    // JSX callers overlay on top of this container (e.g. contacts/artwork's
+    // absolutely-positioned text cards), regardless of DOM order. z-index: 0
+    // contains them to this box while this box itself still stacks by plain DOM
+    // order among its own siblings, same as before.
+    zIndex: 0,
     overflow: 'hidden',
     aspectRatio,
     backgroundColor: 'transparent',
@@ -245,6 +258,143 @@ const InlineSvgProgressiveImage = forwardRef<
   );
 });
 
+/**
+ * Safari fallback for SVGs with embedded raster art. Safari renders that content
+ * (a raster <image> inside a live, DOM-injected SVG) through a permanently soft,
+ * filter-backing-store-capped compositing path no matter the source resolution
+ * (see useProgressiveSvg) — so instead, the actual visible pixels come from a
+ * flattened raster export of the same artwork (SvgService.flattenToRaster on the
+ * server), loaded exactly like a normal photo (LQIP blur-in, then a silent
+ * breakpoint upgrade). The original inline SVG shell still gets mounted, but kept
+ * invisible: id-based position hooks (useSvgRectPosition, useSvgCirclePosition)
+ * query it via getBBox()/getCTM() to place real HTML content over marked spots in
+ * the artwork, and that geometry has nothing to do with which layer is on screen.
+ */
+const SvgRasterFallbackImage = forwardRef<
+  HTMLDivElement,
+  ProgressiveImageProps
+>(function SvgRasterFallbackImage(
+  { src, alt, aspectRatio, className = '', style = {} },
+  forwardedRef
+) {
+  const { ref: svgRef, intrinsic } = useProgressiveSvg(src, alt);
+  const {
+    ref: rasterRef,
+    src: targetSrc,
+    lqip,
+    isLoaded
+  } = useProgressiveImage(src, { forceFormat: 'webp' });
+
+  const [currentSrc, setCurrentSrc] = useState<string | null>(null);
+  const [pendingSrc, setPendingSrc] = useState<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const lastStableSrc = useRef<string | null>(null);
+
+  const setRef = (node: HTMLDivElement | null) => {
+    rasterRef(node);
+    if (typeof forwardedRef === 'function') forwardedRef(node);
+    else if (forwardedRef) forwardedRef.current = node;
+  };
+
+  const resolvedAspectRatio = aspectRatio ?? intrinsicAspectRatio(intrinsic);
+
+  useEffect(() => {
+    if (!isLoaded || !targetSrc) return;
+    if (!currentSrc) {
+      setCurrentSrc(targetSrc);
+      lastStableSrc.current = targetSrc;
+    } else if (targetSrc !== lastStableSrc.current) {
+      setPendingSrc(targetSrc);
+      setIsTransitioning(true);
+    }
+  }, [targetSrc, isLoaded, currentSrc]);
+
+  const handlePendingLoad = () => {
+    if (!pendingSrc) return;
+    setCurrentSrc(pendingSrc);
+    lastStableSrc.current = pendingSrc;
+    setPendingSrc(null);
+    setIsTransitioning(false);
+  };
+
+  return (
+    <div
+      ref={setRef}
+      className={`progressive-image-container ${className}`}
+      style={containerStyle(resolvedAspectRatio, style)}
+      data-progressive-src={src}
+    >
+      <Skeleton visible={!lqip} />
+      {lqip && (
+        <img
+          src={lqip}
+          alt=''
+          aria-hidden='true'
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            filter: 'blur(20px)',
+            transition: 'opacity 0.6s ease',
+            opacity: currentSrc ? 0 : 1,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            zIndex: 1
+          }}
+        />
+      )}
+      {currentSrc && (
+        <img
+          src={currentSrc}
+          alt={alt}
+          decoding='async'
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            transition: 'opacity 0.5s ease-in-out',
+            opacity: isTransitioning ? 0.7 : 1,
+            position: 'relative',
+            zIndex: 2
+          }}
+        />
+      )}
+      {pendingSrc && (
+        <img
+          src={pendingSrc}
+          alt=''
+          decoding='async'
+          onLoad={handlePendingLoad}
+          onError={handlePendingLoad}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            opacity: 0,
+            zIndex: 0
+          }}
+        />
+      )}
+      {/* Geometry-only twin, never painted — opacity 0, not visibility:hidden or
+          display:none. Safari's getCTM()/getBBox() (used by useSvgRectPosition /
+          useSvgCirclePosition to place real HTML over marked spots in the artwork)
+          returns null/zeroed results for content it considers "not rendered", and
+          in WebKit specifically that bar includes visibility:hidden SVG subtrees,
+          not just display:none ones — opacity keeps it fully in the render tree
+          while still being invisible and non-interactive. */}
+      <div
+        ref={svgRef}
+        aria-hidden='true'
+        style={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}
+      />
+    </div>
+  );
+});
+
 /** Routes by manifest-declared type. Falls back to the raster path (which itself has
  * its own LQIP/w=320 fallback) until the manifest has loaded. */
 export const ProgressiveImage = forwardRef<
@@ -255,7 +405,11 @@ export const ProgressiveImage = forwardRef<
   const type = manifest[props.src]?.type;
 
   if (type === 'svg-with-raster')
-    return <InlineSvgProgressiveImage {...props} ref={forwardedRef} />;
+    return IS_SAFARI ? (
+      <SvgRasterFallbackImage {...props} ref={forwardedRef} />
+    ) : (
+      <InlineSvgProgressiveImage {...props} ref={forwardedRef} />
+    );
   if (type === 'svg-vector')
     return <VectorSvgImage {...props} ref={forwardedRef} />;
   return <RasterProgressiveImage {...props} ref={forwardedRef} />;

@@ -73,7 +73,15 @@ export class ImagesController {
     queryFormat: string | undefined,
     accept: string | undefined
   ): 'webp' | 'avif' | 'png' | 'jpeg' | 'svg' {
-    if (path.extname(resolvedPath).toLowerCase() === '.svg') return 'svg';
+    if (path.extname(resolvedPath).toLowerCase() === '.svg') {
+      // Explicit raster override (Safari fallback for svg-with-raster sources —
+      // see SvgService.flattenToRaster): opt-in only, via an explicit query param.
+      // Accept-header negotiation is intentionally not consulted here — clients
+      // that want the vector/embedded-raster shell (the default, and the only
+      // thing that exists for svg-vector sources) still get exactly that.
+      if (queryFormat === 'webp' || queryFormat === 'avif') return queryFormat;
+      return 'svg';
+    }
     if (queryFormat === 'avif' || queryFormat === 'webp' || queryFormat === 'png' || queryFormat === 'jpeg') {
       return queryFormat;
     }

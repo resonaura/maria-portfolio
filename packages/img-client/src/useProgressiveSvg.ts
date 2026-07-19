@@ -171,6 +171,18 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
         if (root) {
           root.style.filter = 'blur(0px)';
           root.style.transform = 'scale(1)';
+          // Safari keeps SVG content routed through a software filter-compositing
+          // pass for as long as any `filter` value is set — even `blur(0px)` —
+          // capping the embedded raster <image> at a soft, low-res rasterization
+          // regardless of how sharp the fetched source actually is. Only removing
+          // the property outright (once the fade-to-sharp transition has visually
+          // finished) drops the element back to normal compositing.
+          const clearFilter = (e: TransitionEvent) => {
+            if (e.propertyName !== 'filter') return;
+            root.style.removeProperty('filter');
+            root.removeEventListener('transitionend', clearFilter);
+          };
+          root.addEventListener('transitionend', clearFilter);
         }
         setReady(true);
 

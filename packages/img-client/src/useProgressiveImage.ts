@@ -7,11 +7,16 @@ import { useNetworkQuality } from './useNetworkQuality.js';
 
 interface UseProgressiveImageOptions {
   debounceMs?: number;
+  /** Bypasses Accept-header content negotiation and forces this exact format —
+   * used to pull a flattened raster rendition of an svg-with-raster source
+   * (see ProgressiveImage's Safari fallback), which the server otherwise only
+   * ever serves as the vector/embedded-raster SVG shell. */
+  forceFormat?: 'webp' | 'avif';
 }
 
 export function useProgressiveImage(src: string, options: UseProgressiveImageOptions = {}) {
   const { manifest, isLoaded: manifestLoaded } = useImgManifest();
-  const { debounceMs = 300 } = options;
+  const { debounceMs = 300, forceFormat } = options;
 
   const { ref, width: containerWidth } = useElementWidth(debounceMs);
   const dpr = useDevicePixelRatio();
@@ -29,7 +34,7 @@ export function useProgressiveImage(src: string, options: UseProgressiveImageOpt
   useEffect(() => {
     if (!manifestLoaded || containerWidth === null) return;
 
-    const suffix = contentHash ? `&v=${contentHash}` : '';
+    const suffix = `${contentHash ? `&v=${contentHash}` : ''}${forceFormat ? `&format=${forceFormat}` : ''}`;
     const previewBp = pickBreakpoint(containerWidth, 1, breakpoints ?? []);
     // On a flagged data-saver mode or 2G-class connection, stay at the light 1x
     // tier — it already looks good, and a bad connection can't afford repeating
@@ -79,7 +84,7 @@ export function useProgressiveImage(src: string, options: UseProgressiveImageOpt
         retinaImg.onerror = null;
       }
     };
-  }, [src, containerWidth, dpr, breakpoints, contentHash, isSlow, manifestLoaded]);
+  }, [src, containerWidth, dpr, breakpoints, contentHash, isSlow, manifestLoaded, forceFormat]);
 
   return {
     ref,

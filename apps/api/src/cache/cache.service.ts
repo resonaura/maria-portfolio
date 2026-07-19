@@ -114,6 +114,22 @@ export class CacheService {
       const optimized = await this.svg.optimizeEmbeddedRasters(content, spec.width!, spec.quality ?? DEFAULT_QUALITY);
       return Buffer.from(optimized, 'utf-8');
     }
+    // svg-with-raster explicitly requested as webp/avif (Safari fallback — see
+    // SvgService.flattenToRaster) flattens straight from the source SVG instead of
+    // going through the generic raster optimizer, which doesn't know how to size
+    // an SVG's native decode sanely.
+    const isSvgSource = path.extname(fullSourcePath).toLowerCase() === '.svg';
+    if (isSvgSource && (spec.format === 'webp' || spec.format === 'avif')) {
+      const content = await this.svg.read(fullSourcePath);
+      const intrinsic = this.svg.getIntrinsicSize(content);
+      return this.svg.flattenToRaster(
+        content,
+        intrinsic,
+        spec.width ?? BREAKPOINTS[0],
+        spec.quality ?? DEFAULT_QUALITY,
+        spec.format
+      );
+    }
     const result = await this.optimizer.optimizeRaster(fullSourcePath, {
       width: spec.width ?? undefined,
       format: spec.format as 'webp' | 'avif' | 'png' | 'jpeg',
@@ -397,24 +413,37 @@ export class CacheService {
       const ext = path.extname(relativePath).toLowerCase();
       const isSvg = ext === '.svg';
       const isVector = isSvg && row.kind === 'svg-vector';
+      // Explicit raster override for an svg-with-raster source (Safari fallback —
+      // see SvgService.flattenToRaster): everything else about an .svg path still
+      // defaults to serving the vector/embedded-raster shell.
+      const wantsSvgFlattenedToRaster =
+        isSvg && row.kind === 'svg-with-raster' && (request.format === 'webp' || request.format === 'avif');
 
       const spec: VariantSpec = isVector
         ? { key: 'vector', format: 'vector', width: null, quality: null, ext: 'svg' }
-        : isSvg
+        : wantsSvgFlattenedToRaster
           ? {
-              key: this.hasher.variantKey({ w: request.width, f: 'svg' }),
-              format: 'svg',
+              key: this.hasher.variantKey({ w: request.width, f: request.format, q: request.quality ?? DEFAULT_QUALITY }),
+              format: request.format!,
               width: request.width ?? BREAKPOINTS[0],
               quality: request.quality ?? DEFAULT_QUALITY,
-              ext: 'svg'
+              ext: request.format!
             }
-          : {
-              key: this.hasher.variantKey({ w: request.width, f: request.format, q: request.quality ?? DEFAULT_QUALITY }),
-              format: request.format ?? 'webp',
-              width: request.width ?? null,
-              quality: request.quality ?? DEFAULT_QUALITY,
-              ext: request.format ?? 'webp'
-            };
+          : isSvg
+            ? {
+                key: this.hasher.variantKey({ w: request.width, f: 'svg' }),
+                format: 'svg',
+                width: request.width ?? BREAKPOINTS[0],
+                quality: request.quality ?? DEFAULT_QUALITY,
+                ext: 'svg'
+              }
+            : {
+                key: this.hasher.variantKey({ w: request.width, f: request.format, q: request.quality ?? DEFAULT_QUALITY }),
+                format: request.format ?? 'webp',
+                width: request.width ?? null,
+                quality: request.quality ?? DEFAULT_QUALITY,
+                ext: request.format ?? 'webp'
+              };
 
       let variant = await this.variants.findOne({ where: { sourceFileId: row.id, variantKey: spec.key } });
       if (variant) {

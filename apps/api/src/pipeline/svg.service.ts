@@ -118,6 +118,46 @@ export class SvgService {
     return `data:image/svg+xml;base64,${Buffer.from(optimized, 'utf-8').toString('base64')}`;
   }
 
+  /**
+   * Flattens an svg-with-raster source straight to a webp/avif buffer in a single
+   * lossy pass — for Safari, which renders the same content composited inline
+   * (raster <image> inside an SVG document) through a permanently soft, backing-store
+   * capped path regardless of source resolution (see useProgressiveSvg on the client).
+   * A plain rasterized <img> sidesteps that entirely.
+   *
+   * Source SVGs here declare width="100%" height="100%" with no absolute size, so
+   * sharp/librsvg has nothing to size the native decode by except viewBox units at
+   * its default 72dpi — for an 18000-wide viewBox that's a ~254MP decode before any
+   * resize happens. `density` is scaled down so the native decode lands close to
+   * targetWidth directly, and the trailing resize only needs to correct rounding.
+   */
+  async flattenToRaster(
+    svgContent: string,
+    intrinsic: IntrinsicSize,
+    targetWidth: number,
+    quality: number,
+    format: 'webp' | 'avif'
+  ): Promise<Buffer> {
+    const viewBoxWidth = intrinsic.w && intrinsic.w > 0 ? intrinsic.w : targetWidth;
+    // +15% headroom, unrounded: density is a DPI passed straight to librsvg, which
+    // rounds pixel dimensions internally — rounding here too (or landing exactly on
+    // targetWidth) risks the native decode coming out a hair under targetWidth,
+    // which withoutEnlargement below would then leave uncorrected and soft.
+    const density = Math.max(0.1, (72 * targetWidth * 1.15) / viewBoxWidth);
+
+    const pipeline = sharp(Buffer.from(svgContent, 'utf-8'), { density }).resize({
+      width: targetWidth,
+      withoutEnlargement: true
+    });
+
+    // effort 4 instead of the optimizer's usual 6: at the top breakpoints this is a
+    // ~250MP-viewBox decode, and encode effort 6 buys ~1% smaller output for nearly
+    // 3x the time on a path that's already synchronous on a cache-miss request.
+    return format === 'avif'
+      ? pipeline.avif({ quality, effort: 4, chromaSubsampling: '4:4:4' }).toBuffer()
+      : pipeline.webp({ quality, effort: 4, smartSubsample: true }).toBuffer();
+  }
+
   getIntrinsicSize(svgContent: string): IntrinsicSize {
     const viewBox = VIEWBOX_RE.exec(svgContent);
     if (viewBox) {

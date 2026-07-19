@@ -2,6 +2,7 @@ export * from './types.js';
 export * from './context.js';
 export * from './aspectRatio.js';
 export * from './breakpoint.js';
+export * from './isSafari.js';
 export * from './useDevicePixelRatio.js';
 export * from './useElementWidth.js';
 export * from './useNetworkQuality.js';
