@@ -7,7 +7,12 @@
   // The Three.js canvas sits at z-index: 0 (see .three-bg).
   // All content must be above it.
   .slide-content {
+    display: flex;
     position: relative;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
     z-index: 1;
     width: 100%;
   }

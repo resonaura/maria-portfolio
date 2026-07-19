@@ -27,7 +27,6 @@
     "@maria-portfolio/img-client": "workspace:*",
     "fastify": "^5.10.0",
     "framer-motion": "^12.42.2",
-    "ipad-cursor": "^0.5.2",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

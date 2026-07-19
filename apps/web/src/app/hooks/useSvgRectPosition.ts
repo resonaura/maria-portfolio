@@ -67,9 +67,54 @@ export function useSvgRectPosition(
       const containerRect = container.getBoundingClientRect();
       if (!containerRect.width || !containerRect.height) return;
 
-      // useProgressiveSvg sets preserveAspectRatio="xMidYMid slice" on the <svg>
-      // element at mount — uniform scale to cover the container (like object-fit:cover).
-      // Math.max mirrors that: scale by whichever axis fills the container first.
+      // Transform target coordinates using the coordinate transform matrix (CTM)
+      // to resolve parent transforms like scale matrices or translation offsets.
+      const ctm = target.getCTM();
+
+      if (ctm) {
+        const corners = [
+          { x: bbox.x, y: bbox.y },
+          { x: bbox.x + bbox.width, y: bbox.y },
+          { x: bbox.x, y: bbox.y + bbox.height },
+          { x: bbox.x + bbox.width, y: bbox.y + bbox.height }
+        ].map((p) => ({
+          x: ctm.a * p.x + ctm.c * p.y + ctm.e,
+          y: ctm.b * p.x + ctm.d * p.y + ctm.f
+        }));
+
+        const xs = corners.map((c) => c.x);
+        const ys = corners.map((c) => c.y);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+
+        // Since ctm transforms directly to the SVG viewport's coordinate system
+        // (which is in CSS pixels of the SVG element), these values are already
+        // scaled and offset correctly. No manual scale/offset multiplication is needed.
+        const next: SvgRectPosition = {
+          left: minX,
+          top: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+          ready: true
+        };
+
+        const prev = lastPosRef.current;
+        const unchanged =
+          Math.abs(next.left - prev.left) < EPSILON &&
+          Math.abs(next.top - prev.top) < EPSILON &&
+          Math.abs(next.width - prev.width) < EPSILON &&
+          Math.abs(next.height - prev.height) < EPSILON &&
+          next.ready === prev.ready;
+        if (unchanged) return;
+
+        lastPosRef.current = next;
+        setPos(next);
+        return;
+      }
+
+      // Fallback in case target.getCTM() is not available
       const scale = Math.max(containerRect.width / viewBox.w, containerRect.height / viewBox.h);
       const offsetX = (containerRect.width - viewBox.w * scale) / 2;
       const offsetY = (containerRect.height - viewBox.h * scale) / 2;

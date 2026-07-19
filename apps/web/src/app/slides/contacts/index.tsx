@@ -1,4 +1,4 @@
-import { buttonVariants } from '@heroui/react';
+import { buttonVariants, cn } from '@heroui/react';
 import { motion } from 'framer-motion';
 import { ProgressiveImage } from '@maria-portfolio/img-client';
 import { Slide } from '../../components/slide';
@@ -40,17 +40,18 @@ export function ContactsSlide() {
               height: cta.height
             }}
           >
-            <p className='contacts-cta-label'>Со мной можно связаться</p>
-            <h2>Let&apos;s build something great</h2>
-            <motion.a
+            <h2>Want to work together?</h2>
+            <motion.button
               data-cursor='block'
-              className={buttonVariants({ variant: 'primary' })}
-              href={CONTACT_EMAIL}
-              whileHover={{ y: -2 }}
+              className={cn(
+                buttonVariants({ variant: 'primary' }),
+                'contact-me-button'
+              )}
+              onClick={() => window.open(CONTACT_EMAIL, '_blank')}
               whileTap={tapScale}
             >
               Contact Me
-            </motion.a>
+            </motion.button>
           </div>
         )}
       </motion.div>

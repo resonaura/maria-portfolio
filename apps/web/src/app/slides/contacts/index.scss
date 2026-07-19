@@ -15,24 +15,24 @@
 
   // Positioned absolutely over the white rect inside 6-1.svg
   .contacts-cta {
-    position: absolute;
     display: flex;
+    position: absolute;
     flex-direction: column;
-    align-items: center;
     justify-content: center;
+    align-items: center;
     gap: 10px;
-    padding: 12px;
     box-sizing: border-box;
+    padding: 12px;
     text-align: center;
 
     .contacts-cta-label {
+      opacity: 0.65;
       margin: 0;
       color: #17171a;
-      font-size: 11px;
       font-weight: 600;
+      font-size: 11px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      opacity: 0.65;
 
       @include media_md {
         font-size: 13px;
@@ -51,10 +51,19 @@
       }
     }
 
+    .contact-me-button {
+      background: black;
+    }
+
     // On light theme the SVG rect is already light — invert text too.
     [data-theme='light'] & h2,
     [data-theme='light'] & .contacts-cta-label {
       filter: invert(1);
+    }
+
+    [data-theme='light'] & .contact-me-button {
+      background: white;
+      color: black;
     }
   }
 }
