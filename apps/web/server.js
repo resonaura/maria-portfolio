@@ -1,3 +1,6 @@
+import dns from 'node:dns';
+dns.setDefaultResultOrder('ipv4first');
+
 import fastifyCompress from '@fastify/compress';
 import fastifyHttpProxy from '@fastify/http-proxy';
 import fastifyStatic from '@fastify/static';
