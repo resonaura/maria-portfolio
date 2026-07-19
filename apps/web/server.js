@@ -1,3 +1,5 @@
+import 'dotenv/config'; // Подгружаем переменные из .env файла
+
 import dns from 'node:dns';
 dns.setDefaultResultOrder('ipv4first');
 
