@@ -7,8 +7,11 @@
   color: var(--app-text);
 
   .full-bleed-container {
+    position: relative;
+    left: -100px;
     border-radius: 0;
-    width: 100%;
+    width: calc(100% + 300px);
+    height: calc(0.2vw);
 
     .art-image {
       border-radius: 0;

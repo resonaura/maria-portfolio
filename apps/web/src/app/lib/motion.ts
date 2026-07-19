@@ -2,15 +2,6 @@ import { Transition, Variants } from 'framer-motion';
 
 export const easeOut: Transition['ease'] = [0.16, 1, 0.3, 1];
 
-export const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 40 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.6, ease: easeOut }
-  }
-};
-
 export const fadeIn: Variants = {
   hidden: { opacity: 0 },
   visible: {
@@ -18,6 +9,11 @@ export const fadeIn: Variants = {
     transition: { duration: 0.6, ease: easeOut }
   }
 };
+
+// Every slide-entrance variant is a plain fade now — kept as a separate name
+// (rather than replacing every `fadeUp` call site with `fadeIn`) so a slide-up
+// motion can come back later without touching every slide again.
+export const fadeUp: Variants = fadeIn;
 
 export const staggerContainer: Variants = {
   hidden: {},

@@ -8,7 +8,7 @@ export interface ISlide {
   children?: ReactNode;
   style?: CSSProperties;
   className?: string;
-  /** Defaults to fadeUp (fade + slide-up) — override for a plainer entrance. */
+  /** Defaults to fadeUp (a plain fade). */
   variants?: Variants;
 }
 

@@ -8,20 +8,6 @@ export function OtherArtsSlide() {
   return (
     <section className='other-arts-slide'>
       <motion.div
-        className='full-bleed-container'
-        variants={fadeIn}
-        initial='hidden'
-        whileInView='visible'
-        viewport={viewportOnce}
-      >
-        <ArtImage
-          src='arts/3-5.svg'
-          alt='Section divider'
-          className='full-bleed-image'
-          aspectRatio='12000 / 303'
-        />
-      </motion.div>
-      <motion.div
         className='packaging-intro'
         variants={fadeUp}
         initial='hidden'

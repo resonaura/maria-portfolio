@@ -381,20 +381,20 @@ export function ThreeBackground() {
     // detail-sensitive) tiers redraw less often to cut that cost.
     const tierEntries = [
       { tier: buildTier(frontCanvas, W, H, [allLayers[0]], false, isDark, 2), skip: 1 },
-      { tier: buildTier(midCanvas, W, H, [allLayers[1], allLayers[2]], false, isDark, 1), skip: 2 },
-      { tier: buildTier(backCanvas, W, H, [allLayers[3], allLayers[4]], true, isDark, 1), skip: 3 },
+      { tier: buildTier(midCanvas, W, H, [allLayers[1], allLayers[2]], false, isDark, 1), skip: 1 },
+      { tier: buildTier(backCanvas, W, H, [allLayers[3], allLayers[4]], true, isDark, 1), skip: 2 },
     ];
 
     const renderAll = () => tierEntries.forEach(({ tier }) => tier.renderer.render(tier.scene, tier.camera));
 
     // ── Scroll-driven camera parallax ──────────────────────────────────────
-    // Ordinary scroll deltas (wheel/trackpad, even a fast flick) track 1:1 with no
-    // easing — that's the "no transition" behavior. But a genuinely discontinuous
-    // jump (scrollbar-track click, Home/End, a scroll-to-anchor) would otherwise
+    // Ordinary scroll deltas (wheel/trackpad) track 1:1 with no easing — that's
+    // the "no transition" behavior. But a fast flick, or a genuinely discontinuous
+    // jump (scrollbar-track click, Home/End, a scroll-to-anchor), would otherwise
     // teleport the buildings in a single frame, which reads as a jarring pop — so
-    // only *that* case gets eased back in over a few frames.
-    const JERK_THRESHOLD_PX = 300; // bigger than any single-frame wheel/trackpad delta
-    const SMOOTHING_EASE = 0.25;
+    // that case gets eased back in over a few frames instead.
+    const JERK_THRESHOLD_PX = 120; // a fast trackpad flick alone can hit 100-250px/frame
+    const SMOOTHING_EASE = 0.35;
     const SNAP_EPSILON_PX = 0.5;
 
     let lastAppliedScrollY = window.scrollY;
