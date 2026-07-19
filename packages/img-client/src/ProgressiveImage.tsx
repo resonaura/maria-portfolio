@@ -234,6 +234,10 @@ const InlineSvgProgressiveImage = forwardRef<
       ref={forwardedRef}
       className={`progressive-image-container ${className}`}
       style={containerStyle(resolvedAspectRatio, style)}
+      // The injected <svg> has no src/currentSrc to recover the manifest key
+      // from (unlike the <img>-based paths) — external readers of the DOM
+      // (e.g. useHeaderContrast's brightness sampling) need this instead.
+      data-progressive-src={src}
     >
       <Skeleton visible={!hasLqip} />
       <div ref={hookRef} style={{ width: '100%', height: '100%' }} />

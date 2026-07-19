@@ -62,4 +62,38 @@ export class OptimizerService {
       return { w: null, h: null };
     }
   }
+
+  /**
+   * Coarse per-row brightness profile (0 = black, 1 = white), computed once at
+   * index time so the client can pick "is the header over a light or dark part
+   * of this image" from a manifest array instead of sampling live pixels via
+   * canvas (fragile across origins, and costs a draw+readback every scroll frame).
+   *
+   * Transparent regions (most of this site's line-art SVGs) are flattened onto a
+   * neutral mid-gray first — that reads as a soft "no strong opinion" for those
+   * pixels rather than skewing hard toward black, which raw RGBA of a
+   * transparent pixel would otherwise do.
+   */
+  async computeBrightnessProfile(filePath: string, bands = 32): Promise<number[]> {
+    try {
+      const { data, info } = await sharp(filePath)
+        .flatten({ background: { r: 128, g: 128, b: 128 } })
+        .resize({ width: 8, height: bands, fit: 'fill' })
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      const profile: number[] = [];
+      for (let row = 0; row < info.height; row++) {
+        let sum = 0;
+        for (let col = 0; col < info.width; col++) {
+          const idx = (row * info.width + col) * info.channels;
+          sum += (0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]) / 255;
+        }
+        profile.push(sum / info.width);
+      }
+      return profile;
+    } catch {
+      return [];
+    }
+  }
 }

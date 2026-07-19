@@ -285,4 +285,21 @@ describe('CacheService reconciliation', () => {
 
     expect(await fs.access(orphanDir).then(() => true).catch(() => false)).toBe(false);
   });
+
+  it('backfills contrastProfile on an unchanged file that was indexed before that column existed', async () => {
+    await writeFixturePng('arts/legacy.png');
+    await cacheService.reconcileSourceFile('arts/legacy.png');
+
+    // Simulate a row indexed before contrastProfile existed (e.g. before this
+    // migration ran) — the hash-match branch doesn't otherwise revisit metadata.
+    await sourceRepo.update({ relativePath: 'arts/legacy.png' }, { contrastProfile: null });
+    let source = await sourceRepo.findOne({ where: { relativePath: 'arts/legacy.png' } });
+    expect(source!.contrastProfile).toBeNull();
+
+    await cacheService.reconcileSourceFile('arts/legacy.png');
+
+    source = await sourceRepo.findOne({ where: { relativePath: 'arts/legacy.png' } });
+    expect(source!.contrastProfile).not.toBeNull();
+    expect(source!.contrastProfile!.length).toBeGreaterThan(0);
+  });
 });

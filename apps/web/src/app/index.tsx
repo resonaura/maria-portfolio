@@ -12,6 +12,7 @@ import { MafiaSlide } from './slides/mafia';
 import { OtherArtsSlide } from './slides/otherArts';
 
 import { WebDesignSlide } from './slides/webDesign';
+import { ContactsSlide } from './slides/contacts';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
           <KhinkaliSlide />
 
           <WebDesignSlide />
+          <ContactsSlide />
         </div>
       </IpadProvider>
     </ThemeProvider>

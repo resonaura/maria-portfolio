@@ -41,6 +41,12 @@ export class SourceFile {
   @Column({ type: 'text', default: '' })
   lqip!: string;
 
+  /** Per-row brightness profile (0 = black, 1 = white), top to bottom — see
+   * OptimizerService.computeBrightnessProfile. Empty until the app-level
+   * TypeORM sync adds this column and the row is reconciled at least once. */
+  @Column({ type: 'simple-json', nullable: true })
+  contrastProfile!: number[] | null;
+
   @OneToMany(() => CacheVariant, (variant) => variant.sourceFile)
   variants!: CacheVariant[];
 

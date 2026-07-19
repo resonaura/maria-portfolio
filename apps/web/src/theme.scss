@@ -5,10 +5,10 @@
 
 :root,
 [data-theme='dark'] {
-  --app-background: #0a0a0a;
+  --app-background: #000;
   --app-text: #f5f5f5;
   --app-text-muted: rgba(245, 245, 245, 0.65);
-  --app-header-background-scrolled: rgba(10, 10, 10, 0.8);
+  --app-header-background-scrolled: rgba(0, 0, 0, 0.85);
   --app-surface: rgba(255, 255, 255, 0.06);
   --app-surface-strong: rgba(255, 255, 255, 0.09);
   --app-border: rgba(255, 255, 255, 0.12);
@@ -17,10 +17,10 @@
 }
 
 [data-theme='light'] {
-  --app-background: #faf9f5;
+  --app-background: #fff;
   --app-text: #17171a;
   --app-text-muted: rgba(23, 23, 26, 0.65);
-  --app-header-background-scrolled: rgba(250, 249, 245, 0.85);
+  --app-header-background-scrolled: rgba(255, 255, 255, 0.85);
   --app-surface: rgba(0, 0, 0, 0.04);
   --app-surface-strong: rgba(0, 0, 0, 0.06);
   --app-border: rgba(0, 0, 0, 0.12);

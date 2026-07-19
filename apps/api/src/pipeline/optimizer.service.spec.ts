@@ -49,4 +49,34 @@ describe('OptimizerService', () => {
     expect(meta.width).toBe(400);
     expect(meta.height).toBe(300);
   });
+
+  it('computes a brightness profile that tracks a top-to-bottom black-to-white gradient', async () => {
+    const filePath = path.join(root, 'gradient.png');
+    const bands = 8;
+    // A vertical gradient, black at the top fading to white at the bottom.
+    const raw = Buffer.alloc(bands * 4 * 3);
+    for (let row = 0; row < bands; row++) {
+      const value = Math.round((row / (bands - 1)) * 255);
+      for (let col = 0; col < 4; col++) {
+        const idx = (row * 4 + col) * 3;
+        raw[idx] = raw[idx + 1] = raw[idx + 2] = value;
+      }
+    }
+    await sharp(raw, { raw: { width: 4, height: bands, channels: 3 } }).png().toFile(filePath);
+
+    const profile = await optimizer.computeBrightnessProfile(filePath, bands);
+
+    expect(profile).toHaveLength(bands);
+    expect(profile[0]).toBeLessThan(0.2); // top stays dark
+    expect(profile[bands - 1]).toBeGreaterThan(0.8); // bottom stays light
+    // Monotonically non-decreasing top to bottom, matching the source gradient.
+    for (let i = 1; i < profile.length; i++) {
+      expect(profile[i]).toBeGreaterThanOrEqual(profile[i - 1] - 0.05);
+    }
+  });
+
+  it('returns an empty profile instead of throwing for an unreadable file', async () => {
+    const profile = await optimizer.computeBrightnessProfile(path.join(root, 'does-not-exist.png'));
+    expect(profile).toEqual([]);
+  });
 });

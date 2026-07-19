@@ -91,16 +91,17 @@ export class CacheService {
   }
 
   private async classifyAndDescribe(absolutePath: string, ext: string) {
+    const contrastProfile = await this.optimizer.computeBrightnessProfile(absolutePath);
     if (ext === '.svg') {
       const content = await this.svg.read(absolutePath);
       const kind: SourceFileKind = this.svg.classify(content);
       const intrinsic = this.svg.getIntrinsicSize(content);
       const lqip = kind === 'svg-with-raster' ? await this.svg.generateLqip(content) : '';
-      return { kind, intrinsic, lqip };
+      return { kind, intrinsic, lqip, contrastProfile };
     }
     const intrinsic = await this.optimizer.getIntrinsicSize(absolutePath);
     const lqip = await this.optimizer.generateRasterLqip(absolutePath);
-    return { kind: 'raster' as SourceFileKind, intrinsic, lqip };
+    return { kind: 'raster' as SourceFileKind, intrinsic, lqip, contrastProfile };
   }
 
   private async writeVariantFile(fullSourcePath: string, spec: VariantSpec): Promise<Buffer> {
@@ -226,7 +227,7 @@ export class CacheService {
         : await this.hasher.hashContent(fullSourcePath);
 
     if (!row) {
-      const { kind, intrinsic, lqip } = await this.classifyAndDescribe(fullSourcePath, ext);
+      const { kind, intrinsic, lqip, contrastProfile } = await this.classifyAndDescribe(fullSourcePath, ext);
       const created = await this.sourceFiles.save(
         this.sourceFiles.create({
           relativePath,
@@ -236,7 +237,8 @@ export class CacheService {
           kind,
           width: intrinsic.w,
           height: intrinsic.h,
-          lqip
+          lqip,
+          contrastProfile
         })
       );
       this.logger.log(`Indexed new file: ${relativePath} (${kind})`);
@@ -248,7 +250,7 @@ export class CacheService {
       // "если файл отличается от хешсумы то пересоздаём" — full invalidation + regen.
       this.logger.log(`Content changed, invalidating cache: ${relativePath}`);
       await this.purgeVariants(row);
-      const { kind, intrinsic, lqip } = await this.classifyAndDescribe(fullSourcePath, ext);
+      const { kind, intrinsic, lqip, contrastProfile } = await this.classifyAndDescribe(fullSourcePath, ext);
       row.contentHash = hash;
       row.size = stat.size;
       row.mtimeMs = stat.mtimeMs;
@@ -256,9 +258,18 @@ export class CacheService {
       row.width = intrinsic.w;
       row.height = intrinsic.h;
       row.lqip = lqip;
+      row.contrastProfile = contrastProfile;
       await this.sourceFiles.save(row);
       await this.generateAllVariants(row, fullSourcePath);
       return;
+    }
+
+    // Backfills contrastProfile for rows indexed before it existed — the hash-match
+    // branch below only patches missing cache *files*, not metadata, so a row whose
+    // content never changed again would otherwise keep this null forever.
+    if (row.contrastProfile == null) {
+      row.contrastProfile = await this.optimizer.computeBrightnessProfile(fullSourcePath);
+      await this.sourceFiles.save(row);
     }
 
     // Hash matches what's on record — only patch what's actually missing on disk.
@@ -352,7 +363,8 @@ export class CacheService {
         breakpoints: row.kind === 'svg-vector' ? [] : [...BREAKPOINTS],
         type: row.kind,
         intrinsic: { w: row.width, h: row.height },
-        contentHash: row.contentHash
+        contentHash: row.contentHash,
+        contrastProfile: row.contrastProfile ?? []
       };
     }
     return manifest;

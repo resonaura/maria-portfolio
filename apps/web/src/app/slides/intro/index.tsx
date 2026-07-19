@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Button } from '@heroui/react';
 import { Slide } from '../../components/slide';
 import { ThreeBackground } from '../../components/threeBackground';
-import { tapScale } from '../../lib/motion';
+import { fadeIn, tapScale } from '../../lib/motion';
 
 import './index.scss';
 
@@ -18,7 +18,7 @@ export function IntroSlide() {
   };
 
   return (
-    <Slide className={'intro-slide'}>
+    <Slide className={'intro-slide'} variants={fadeIn}>
       {/* Three.js low-poly cityscape background — z-index 0, far layers CSS-blurred by depth */}
       <ThreeBackground />
 

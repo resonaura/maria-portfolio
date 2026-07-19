@@ -1,59 +1,49 @@
 .web-design-slide {
-  .slide-content {
-    margin: 0 auto;
-    padding: 100px 20px 80px;
-    max-width: 900px;
+  background: transparent;
+  padding-bottom: 80px;
+  width: 100%;
+
+  .web-design-section-header {
+    box-sizing: border-box;
+    padding: 60px 20px 50px;
+    width: 100%;
     text-align: center;
 
     h2 {
-      margin: 0 0 30px;
+      margin: 0 0 20px;
       font-weight: 700;
-      font-size: 40px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
+      font-size: 32px;
 
       @include media_md {
-        font-size: 56px;
+        font-size: 48px;
       }
     }
 
     p {
       margin: 0 auto;
-      max-width: 700px;
+      max-width: 680px;
       color: var(--app-text-muted);
       line-height: 1.6;
     }
   }
 
-  .web-projects {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 30px;
-    margin-top: 50px;
-    width: 100%;
-
-    @include media_md {
-      grid-template-columns: repeat(3, 1fr);
-    }
-  }
-
-  .web-project-card {
+  // Two Figma embeds — always stacked vertically (ROWS), each full-width
+  .web-embeds {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    text-align: left;
+    align-self: stretch;
+    gap: 30px;
+    box-sizing: border-box;
+    padding: 0 20px;
+    width: 100%;
+  }
 
-    h3 {
-      margin: 0;
-      font-weight: 700;
-      font-size: 16px;
-    }
-
-    p {
-      margin: 0;
-      color: var(--app-text-muted);
-      font-size: 13px;
-      text-align: left;
-    }
+  .web-embed {
+    position: relative;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+    border-radius: 12px;
+    aspect-ratio: 16 / 10;
+    width: 100%;
+    overflow: hidden;
   }
 }
