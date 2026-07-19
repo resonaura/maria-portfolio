@@ -20,6 +20,43 @@
       })();
     </script>
 
+    <!-- The browser's default scroll restoration re-applies whatever scroll offset
+         was recorded for this history entry on reload/back-forward nav — this is a
+         one-page scroller, so landing anywhere but the very top defeats the intro.
+         Runs as early as possible (before layout) and disables it going forward. -->
+    <script>
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+      }
+      window.scrollTo(0, 0);
+    </script>
+
+    <!-- Boot-shell background/text, inlined so it paints before the app's own
+         stylesheet or JS bundle have loaded — mirrors theme.scss's --app-background
+         values for each theme (kept in sync manually; there's nothing to import
+         from at this point in the document). -->
+    <style>
+      html[data-theme='dark'] {
+        background: #0a0a0a;
+        color: #f5f5f5;
+      }
+      html[data-theme='light'] {
+        background: #faf9f5;
+        color: #17171a;
+      }
+      #boot-shell {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Montserrat', system-ui, sans-serif;
+        font-size: 14px;
+        letter-spacing: 0.02em;
+        opacity: 0.7;
+      }
+    </style>
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -66,7 +103,36 @@
     <meta name="twitter:image" content="/icon.svg" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Replaced wholesale once React mounts (createRoot(...).render(...)) — this
+           is only ever seen while the JS bundle is still downloading/parsing. -->
+      <div id="boot-shell">
+        <p>Loading experience&hellip; <span id="boot-timer">0%</span></p>
+      </div>
+    </div>
+    <script>
+      (function () {
+        // There's no real byte-level progress signal for an ES module script, so
+        // this climbs on an easing curve instead of ticking a raw clock — fast at
+        // first, slowing as it approaches 100% (asymptotic, deliberately never
+        // quite arriving on its own) so it always feels like it's progressing,
+        // however long the actual load takes. main.tsx flips window.__bootDone and
+        // writes a final "100%" itself right before mounting, so this loop stops
+        // the instant that happens instead of racing it on the next frame.
+        var start = performance.now();
+        var TIME_CONSTANT_S = 1.2;
+        function tick() {
+          if (window.__bootDone) return;
+          var el = document.getElementById('boot-timer');
+          if (!el) return; // React has mounted and replaced #root's contents
+          var elapsedS = (performance.now() - start) / 1000;
+          var pct = 100 * (1 - Math.exp(-elapsedS / TIME_CONSTANT_S));
+          el.textContent = Math.round(pct) + '%';
+          requestAnimationFrame(tick);
+        }
+        tick();
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

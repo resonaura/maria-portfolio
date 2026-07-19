@@ -1,10 +1,10 @@
-import { Mail } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { buttonVariants } from '@heroui/react';
+import { motion } from 'framer-motion';
+import { Mail } from 'lucide-react';
 import BlurEffect from 'react-progressive-blur';
-import { ThemeToggle } from '../themeToggle';
-import { tapScale } from '../../lib/motion';
 import { useLowPerfDevice } from '../../hooks/useLowPerfDevice';
+import { tapScale } from '../../lib/motion';
+import { ThemeToggle } from '../themeToggle';
 import './index.scss';
 
 export function Header() {
@@ -35,7 +35,7 @@ export function Header() {
         whileTap={tapScale}
         onClick={scrollToTop}
       >
-        Maria
+        <img src='/logo.svg' width={38} />
       </motion.button>
 
       <div className='actions'>

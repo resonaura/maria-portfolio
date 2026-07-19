@@ -10,7 +10,6 @@ import { IntroSlide } from './slides/intro';
 import { KhinkaliSlide } from './slides/khinkali';
 import { MafiaSlide } from './slides/mafia';
 import { OtherArtsSlide } from './slides/otherArts';
-import { ProjectSlides } from './slides/projects';
 
 import { WebDesignSlide } from './slides/webDesign';
 
@@ -29,7 +28,6 @@ function App() {
           <OtherArtsSlide />
           <KhinkaliSlide />
 
-          <ProjectSlides />
           <WebDesignSlide />
         </div>
       </IpadProvider>

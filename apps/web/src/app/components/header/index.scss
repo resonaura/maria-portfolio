@@ -47,3 +47,6 @@
   }
 }
 
+[data-theme='dark'] #root header .logo {
+  filter: invert(1);
+}

@@ -18,6 +18,7 @@ export function KhinkaliSlide() {
           src='arts/5-1.png'
           alt='Khinkali illustration'
           className='poster-image'
+          aspectRatio='5302 / 32767'
         />
       </motion.div>
 
@@ -34,6 +35,7 @@ export function KhinkaliSlide() {
           src='arts/5-2.png'
           alt='Khinkali illustration'
           className='poster-image'
+          aspectRatio='5304 / 32767'
         />
       </motion.div>
     </section>

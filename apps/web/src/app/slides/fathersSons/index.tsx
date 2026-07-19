@@ -21,7 +21,11 @@ export function FathersSonsSlide() {
         viewport={viewportOnce}
       >
         <div className='logo-wrapper'>
-          <ArtImage src='arts/2-1.svg' alt='Fathers and Sons logo' />
+          <ArtImage
+            src='arts/2-1.svg'
+            alt='Fathers and Sons logo'
+            aspectRatio='34 / 13'
+          />
         </div>
       </motion.div>
 
@@ -50,7 +54,11 @@ export function FathersSonsSlide() {
         viewport={viewportOnce}
       >
         <div className='symbol-wrapper'>
-          <ArtImage src='arts/2-2.svg' alt='Fathers and Sons graphic mark' />
+          <ArtImage
+            src='arts/2-2.svg'
+            alt='Fathers and Sons graphic mark'
+            aspectRatio='81 / 33'
+          />
         </div>
       </motion.div>
 
@@ -66,6 +74,7 @@ export function FathersSonsSlide() {
           src='arts/2-3.svg'
           alt='Fathers and Sons design identity'
           className='full-bleed-image'
+          aspectRatio='116 / 35'
         />
       </motion.div>
 
@@ -99,6 +108,7 @@ export function FathersSonsSlide() {
           src='arts/2-4.svg'
           alt='Competition brand showcase'
           className='full-bleed-image'
+          aspectRatio='1440 / 2100'
         />
       </motion.div>
 

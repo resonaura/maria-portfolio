@@ -36,6 +36,7 @@ export function OtherArtsSlide() {
           src='arts/4-1.png'
           alt='Other artwork illustration'
           className='poster-image'
+          aspectRatio='3276 / 32767'
         />
         <div className='fade-overlay' aria-hidden='true' />
       </motion.div>

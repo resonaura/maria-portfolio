@@ -108,6 +108,7 @@ export function ArtworkSlide({ label }: IArtworkSlide) {
           src='arts/1-1.svg'
           alt={label}
           className='artwork-img'
+          aspectRatio='1440 / 3500'
         />
 
         {circle.ready && (

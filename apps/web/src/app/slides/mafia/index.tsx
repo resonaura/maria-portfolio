@@ -48,6 +48,7 @@ export function MafiaSlide() {
           src='arts/3-1.png'
           alt='The Mafia Game Deck illustration poster'
           className='poster-image'
+          aspectRatio='6000 / 11020'
         />
       </motion.div>
 
@@ -135,6 +136,7 @@ export function MafiaSlide() {
           src='arts/3-5.svg'
           alt='Section divider'
           className='full-bleed-image'
+          aspectRatio='12000 / 303'
         />
       </motion.div>
     </section>
