@@ -28,3 +28,4 @@ apps/api/.cache/
 .turbo
 
 *.env
+*.tsbuildinfo
