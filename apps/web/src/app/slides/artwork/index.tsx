@@ -96,7 +96,7 @@ export function ArtworkSlide({ label }: IArtworkSlide) {
 
   return (
     <motion.section
-      className='artwork-slide'
+      className='artwork-slide first-project-slide'
       variants={fadeIn}
       initial='hidden'
       whileInView='visible'
