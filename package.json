@@ -12,7 +12,8 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "update": "node update.js"
   },
   "devDependencies": {
     "prettier": "^3.9.5",
