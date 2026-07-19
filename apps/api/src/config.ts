@@ -2,7 +2,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 const envSchema = z.object({
-  PORT: z.coerce.number().int().positive().default(4100),
+  PORT: z.coerce.number().int().positive().default(2978),
   HOST: z.string().default('0.0.0.0'),
   STORAGE_DIR: z.string().default(path.resolve(process.cwd(), 'storage')),
   CACHE_DIR: z.string().default(path.resolve(process.cwd(), '.cache')),
