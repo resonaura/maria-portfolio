@@ -1,9 +1,9 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import Fastify from 'fastify';
-import fastifyStatic from '@fastify/static';
 import fastifyCompress from '@fastify/compress';
 import fastifyHttpProxy from '@fastify/http-proxy';
+import fastifyStatic from '@fastify/static';
+import Fastify from 'fastify';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(
@@ -15,7 +15,7 @@ const host = process.env.HOST || '0.0.0.0';
 // Where the @maria-portfolio/api image-optimization service is reachable from
 // this process. In a co-located deploy (single host/container group) the
 // default loopback address is correct; set API_URL to point elsewhere otherwise.
-const apiUrl = process.env.API_URL || 'http://127.0.0.1:4100';
+const apiUrl = process.env.API_URL || 'http://127.0.0.1:2978';
 
 const app = Fastify({ logger: true });
 
