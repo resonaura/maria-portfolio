@@ -9,10 +9,11 @@
 
     // On mobile the artwork's native 18000/14125 ratio renders a short, wide
     // strip, squeezing the overlaid contact card down with it. Crop in on
-    // width a little (preserveAspectRatio="xMidYMid slice" handles the actual
-    // cropping) so the card has more room; restore the full frame once there's
-    // enough viewport width for it not to matter.
-    aspect-ratio: 10 / 9 !important;
+    // width (preserveAspectRatio="xMidYMid slice" handles the actual
+    // cropping — the rendered art ends up wider than the viewport and gets
+    // centered/clipped at the edges) so the card has real room; restore the
+    // full frame once there's enough viewport width for it not to matter.
+    aspect-ratio: 4 / 5 !important;
 
     @include media_md {
       aspect-ratio: 18000 / 14125 !important;
