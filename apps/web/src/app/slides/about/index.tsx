@@ -1,9 +1,9 @@
 import { Mail } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { Button } from '@heroui/react';
 import { Slide } from '../../components/slide';
 import { skills } from '../../../content/skills';
-import { tapScale, viewportOnce } from '../../lib/motion';
+import { easeOut, staggerContainer, tapScale, viewportOnce } from '../../lib/motion';
 
 import './index.scss';
 
@@ -40,9 +40,23 @@ export function AboutSlide() {
           movements, creating eclectic and unique looks.
         </p>
 
-        <div className='skills'>
+        <motion.div
+          className='skills'
+          variants={staggerContainer}
+          initial='hidden'
+          whileInView='visible'
+          viewport={viewportOnce}
+        >
           {skills.map((skill) => {
             const Icon = skill.icon;
+            // Per-skill width target, so each bar needs its own variants object —
+            // still driven by the single observer on .skills above rather than one
+            // whileInView per bar (four simultaneous IntersectionObservers mounting
+            // at once was flaky in Safari, firing maybe half the time).
+            const barVariants: Variants = {
+              hidden: { width: 0 },
+              visible: { width: `${skill.level}%`, transition: { duration: 0.8, ease: easeOut } }
+            };
             return (
               <div className='skill' key={skill.name}>
                 <div className='skill-label'>
@@ -50,18 +64,12 @@ export function AboutSlide() {
                   <span>{skill.name}</span>
                 </div>
                 <div className='skill-bar'>
-                  <motion.div
-                    className='skill-bar-fill'
-                    initial={{ width: 0 }}
-                    whileInView={{ width: `${skill.level}%` }}
-                    viewport={viewportOnce}
-                    transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                  />
+                  <motion.div className='skill-bar-fill' variants={barVariants} />
                 </div>
               </div>
             );
           })}
-        </div>
+        </motion.div>
 
         <div className='actions'>
           <a href='mailto:mkrotova444@gmail.com' style={{ textDecoration: 'none' }}>
