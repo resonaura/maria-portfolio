@@ -10,7 +10,7 @@ const distDir = path.resolve(
   __dirname,
   process.env.BUILD_OUTPUT_PATH || 'dist'
 );
-const port = Number(process.env.PORT) || 3000;
+const port = Number(process.env.PORT) || 2979;
 const host = process.env.HOST || '0.0.0.0';
 // Where the @maria-portfolio/api image-optimization service is reachable from
 // this process. In a co-located deploy (single host/container group) the
