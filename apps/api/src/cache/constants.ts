@@ -5,4 +5,4 @@ export const DEFAULT_QUALITY = 80;
 // SVG → PNG converter version for Safari fallback. Increment when improving
 // flattenToRaster quality (font rendering, spacing, etc.) to trigger automatic
 // regeneration of existing variants on the next reconciliation sweep.
-export const SVG_CONVERTER_VERSION = 2;
+export const SVG_CONVERTER_VERSION = 3;
