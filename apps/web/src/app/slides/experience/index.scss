@@ -78,6 +78,15 @@
       color: var(--app-text-muted);
       font-size: 14px;
       line-height: 1.5;
+      list-style: disc;
+
+      li {
+        margin-bottom: 6px;
+
+        &:last-child {
+          margin-bottom: 0;
+        }
+      }
     }
   }
 

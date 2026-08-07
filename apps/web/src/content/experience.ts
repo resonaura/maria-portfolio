@@ -10,6 +10,33 @@ export interface IExperienceItem {
 export const experience: IExperienceItem[] = [
   {
     column: 'left',
+    role: 'Graphic Designer',
+    company: 'Instant Imprints',
+    period: '2025–2026',
+    location: 'Burnaby, BC',
+    bullets: [
+      'Created custom visual solutions including brochures, posters, signage, promotional materials, and social media graphics for a wide range of clients and industries.',
+      'Developed original graphic concepts and illustrations to communicate key messages while maintaining strong visual impact and brand consistency.',
+      'Collaborated directly with clients and production teams to transform creative ideas into production-ready artwork.',
+      'Refined and rebuilt low-quality client assets, improving overall visual quality and print readiness.',
+      'Designed marketing materials that contributed to increased customer engagement, repeat business, and improved production efficiency.'
+    ]
+  },
+  {
+    column: 'right',
+    role: 'Graphic Designer (Contract/Freelance)',
+    company: 'Smart Receipts',
+    period: '2024–2025',
+    location: 'Vancouver, BC',
+    bullets: [
+      "Developed app icon concepts and interface graphics aligned with the brand's visual language.",
+      'Managed projects independently while maintaining quality standards and meeting deadlines.',
+      'Iterated designs quickly based on feedback, improving visual consistency across digital touchpoints.',
+      'Produced clean, scalable assets optimized for digital platforms and user experience.'
+    ]
+  },
+  {
+    column: 'left',
     role: 'Administrator & Graphic Designer',
     company: 'Construction company «SMD Construction»',
     period: '2024',

@@ -15,7 +15,9 @@ export class CacheVariant {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @ManyToOne(() => SourceFile, (source) => source.variants, { onDelete: 'CASCADE' })
+  @ManyToOne(() => SourceFile, (source) => source.variants, {
+    onDelete: 'CASCADE'
+  })
   @JoinColumn({ name: 'sourceFileId' })
   sourceFile!: SourceFile;
 
@@ -45,6 +47,10 @@ export class CacheVariant {
 
   @Column({ type: 'integer' })
   sizeBytes!: number;
+
+  // Converter version that generated this variant (for auto-regeneration on improvements)
+  @Column({ type: 'integer', default: 1 })
+  converterVersion!: number;
 
   @CreateDateColumn()
   createdAt!: Date;

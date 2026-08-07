@@ -10,7 +10,7 @@ import { SourceFile, SourceFileKind } from '../database/source-file.entity.js';
 import { HasherService } from '../pipeline/hasher.service.js';
 import { OptimizerService } from '../pipeline/optimizer.service.js';
 import { SvgService } from '../pipeline/svg.service.js';
-import { BREAKPOINTS, DEFAULT_QUALITY, RASTER_FORMATS } from './constants.js';
+import { BREAKPOINTS, DEFAULT_QUALITY, RASTER_FORMATS, SVG_CONVERTER_VERSION } from './constants.js';
 import { ImageManifest, ResolvedVariant, VariantSpec } from './types.js';
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -47,8 +47,10 @@ export class CacheService {
   private readonly inFlightReconciles = new Map<string, Promise<unknown>>();
 
   constructor(
-    @InjectRepository(SourceFile) private readonly sourceFiles: Repository<SourceFile>,
-    @InjectRepository(CacheVariant) private readonly variants: Repository<CacheVariant>,
+    @InjectRepository(SourceFile)
+    private readonly sourceFiles: Repository<SourceFile>,
+    @InjectRepository(CacheVariant)
+    private readonly variants: Repository<CacheVariant>,
     private readonly hasher: HasherService,
     private readonly optimizer: OptimizerService,
     private readonly svg: SvgService,
@@ -64,7 +66,15 @@ export class CacheService {
 
   private expectedVariantSpecs(kind: SourceFileKind): VariantSpec[] {
     if (kind === 'svg-vector') {
-      return [{ key: 'vector', format: 'vector', width: null, quality: null, ext: 'svg' }];
+      return [
+        {
+          key: 'vector',
+          format: 'vector',
+          width: null,
+          quality: null,
+          ext: 'svg'
+        }
+      ];
     }
     if (kind === 'svg-with-raster') {
       return BREAKPOINTS.map((width) => ({
@@ -79,7 +89,11 @@ export class CacheService {
     for (const width of BREAKPOINTS) {
       for (const format of RASTER_FORMATS) {
         specs.push({
-          key: this.hasher.variantKey({ w: width, f: format, q: DEFAULT_QUALITY }),
+          key: this.hasher.variantKey({
+            w: width,
+            f: format,
+            q: DEFAULT_QUALITY
+          }),
           format,
           width,
           quality: DEFAULT_QUALITY,
@@ -91,27 +105,41 @@ export class CacheService {
   }
 
   private async classifyAndDescribe(absolutePath: string, ext: string) {
-    const contrastProfile = await this.optimizer.computeBrightnessProfile(absolutePath);
+    const contrastProfile =
+      await this.optimizer.computeBrightnessProfile(absolutePath);
     if (ext === '.svg') {
       const content = await this.svg.read(absolutePath);
       const kind: SourceFileKind = this.svg.classify(content);
       const intrinsic = this.svg.getIntrinsicSize(content);
-      const lqip = kind === 'svg-with-raster' ? await this.svg.generateLqip(content) : '';
+      const lqip =
+        kind === 'svg-with-raster' ? await this.svg.generateLqip(content) : '';
       return { kind, intrinsic, lqip, contrastProfile };
     }
     const intrinsic = await this.optimizer.getIntrinsicSize(absolutePath);
     const lqip = await this.optimizer.generateRasterLqip(absolutePath);
-    return { kind: 'raster' as SourceFileKind, intrinsic, lqip, contrastProfile };
+    return {
+      kind: 'raster' as SourceFileKind,
+      intrinsic,
+      lqip,
+      contrastProfile
+    };
   }
 
-  private async writeVariantFile(fullSourcePath: string, spec: VariantSpec): Promise<Buffer> {
+  private async writeVariantFile(
+    fullSourcePath: string,
+    spec: VariantSpec
+  ): Promise<Buffer> {
     if (spec.format === 'vector') {
       const content = await this.svg.read(fullSourcePath);
       return Buffer.from(this.svg.minifyVector(content), 'utf-8');
     }
     if (spec.format === 'svg') {
       const content = await this.svg.read(fullSourcePath);
-      const optimized = await this.svg.optimizeEmbeddedRasters(content, spec.width!, spec.quality ?? DEFAULT_QUALITY);
+      const optimized = await this.svg.optimizeEmbeddedRasters(
+        content,
+        spec.width!,
+        spec.quality ?? DEFAULT_QUALITY
+      );
       return Buffer.from(optimized, 'utf-8');
     }
     // svg-with-raster explicitly requested as webp/avif (Safari fallback — see
@@ -162,11 +190,18 @@ export class CacheService {
       `Wrote variant '${spec.key}' (${spec.format}${spec.width ? `, w${spec.width}` : ''}, ${buffer.length}B) for ${sourceFile.relativePath}`
     );
 
+    // Determine converter version: only SVG→PNG Safari fallbacks use the versioned converter
+    const isSvgToRaster =
+      sourceFile.kind === 'svg-with-raster' &&
+      (spec.format === 'webp' || spec.format === 'avif');
+    const converterVersion = isSvgToRaster ? SVG_CONVERTER_VERSION : 1;
+
     if (existingId) {
       await this.variants.update(existingId, {
         filename,
         sizeBytes: buffer.length,
-        sourceContentHash: sourceFile.contentHash
+        sourceContentHash: sourceFile.contentHash,
+        converterVersion
       });
       return (await this.variants.findOneBy({ id: existingId }))!;
     }
@@ -179,14 +214,20 @@ export class CacheService {
       width: spec.width,
       quality: spec.quality,
       filename,
-      sizeBytes: buffer.length
+      sizeBytes: buffer.length,
+      converterVersion
     });
     return this.variants.save(variant);
   }
 
-  private async generateAllVariants(sourceFile: SourceFile, fullSourcePath: string): Promise<void> {
+  private async generateAllVariants(
+    sourceFile: SourceFile,
+    fullSourcePath: string
+  ): Promise<void> {
     const specs = this.expectedVariantSpecs(sourceFile.kind);
-    this.logger.log(`Generating ${specs.length} variant(s) for ${sourceFile.relativePath} (${sourceFile.kind})`);
+    this.logger.log(
+      `Generating ${specs.length} variant(s) for ${sourceFile.relativePath} (${sourceFile.kind})`
+    );
     for (const spec of specs) {
       await this.generateVariant(sourceFile, fullSourcePath, spec);
     }
@@ -197,13 +238,20 @@ export class CacheService {
   private async purgeVariants(sourceFile: SourceFile): Promise<void> {
     this.logger.log(`Purging cache for ${sourceFile.relativePath}`);
     await this.variants.delete({ sourceFileId: sourceFile.id });
-    await fs.rm(this.variantDir(sourceFile.relativePath), { recursive: true, force: true });
+    await fs.rm(this.variantDir(sourceFile.relativePath), {
+      recursive: true,
+      force: true
+    });
   }
 
   /** Runs `fn` for `relativePath` after any in-flight reconcile/remove/ensureVariant
    * call for the same path has settled, and queues later callers behind this one. */
-  private async withFileLock<T>(relativePath: string, fn: () => Promise<T>): Promise<T> {
-    const previous = this.inFlightReconciles.get(relativePath) ?? Promise.resolve();
+  private async withFileLock<T>(
+    relativePath: string,
+    fn: () => Promise<T>
+  ): Promise<T> {
+    const previous =
+      this.inFlightReconciles.get(relativePath) ?? Promise.resolve();
     const run = previous.then(fn, fn).finally(() => {
       if (this.inFlightReconciles.get(relativePath) === run) {
         this.inFlightReconciles.delete(relativePath);
@@ -220,7 +268,9 @@ export class CacheService {
    * for the same relativePath are serialized to avoid racing on the same DB row.
    */
   async reconcileSourceFile(relativePath: string): Promise<void> {
-    return this.withFileLock(relativePath, () => this.doReconcileSourceFile(relativePath));
+    return this.withFileLock(relativePath, () =>
+      this.doReconcileSourceFile(relativePath)
+    );
   }
 
   private async doReconcileSourceFile(relativePath: string): Promise<void> {
@@ -243,7 +293,8 @@ export class CacheService {
         : await this.hasher.hashContent(fullSourcePath);
 
     if (!row) {
-      const { kind, intrinsic, lqip, contrastProfile } = await this.classifyAndDescribe(fullSourcePath, ext);
+      const { kind, intrinsic, lqip, contrastProfile } =
+        await this.classifyAndDescribe(fullSourcePath, ext);
       const created = await this.sourceFiles.save(
         this.sourceFiles.create({
           relativePath,
@@ -266,7 +317,8 @@ export class CacheService {
       // "если файл отличается от хешсумы то пересоздаём" — full invalidation + regen.
       this.logger.log(`Content changed, invalidating cache: ${relativePath}`);
       await this.purgeVariants(row);
-      const { kind, intrinsic, lqip, contrastProfile } = await this.classifyAndDescribe(fullSourcePath, ext);
+      const { kind, intrinsic, lqip, contrastProfile } =
+        await this.classifyAndDescribe(fullSourcePath, ext);
       row.contentHash = hash;
       row.size = stat.size;
       row.mtimeMs = stat.mtimeMs;
@@ -284,32 +336,59 @@ export class CacheService {
     // branch below only patches missing cache *files*, not metadata, so a row whose
     // content never changed again would otherwise keep this null forever.
     if (row.contrastProfile == null) {
-      row.contrastProfile = await this.optimizer.computeBrightnessProfile(fullSourcePath);
+      row.contrastProfile =
+        await this.optimizer.computeBrightnessProfile(fullSourcePath);
       await this.sourceFiles.save(row);
     }
 
-    // Hash matches what's on record — only patch what's actually missing on disk.
-    // "если файла в кеше нет какого-то одного... восстанавливаем ток его"
+    // Hash matches what's on record — patch missing files OR outdated converter versions.
+    // SVG→PNG Safari fallback variants get auto-regenerated when SVG_CONVERTER_VERSION increases.
     const specs = this.expectedVariantSpecs(row.kind);
-    const existing = await this.variants.find({ where: { sourceFileId: row.id } });
+    const existing = await this.variants.find({
+      where: { sourceFileId: row.id }
+    });
     const existingByKey = new Map(existing.map((v) => [v.variantKey, v]));
 
     let restored = 0;
     for (const spec of specs) {
       const existingRow = existingByKey.get(spec.key);
       if (existingRow) {
-        const onDisk = await fileExists(path.join(this.cacheFilesDir, existingRow.filename));
-        if (onDisk) continue;
+        const onDisk = await fileExists(
+          path.join(this.cacheFilesDir, existingRow.filename)
+        );
+
+        // Check if this is an outdated SVG→raster Safari fallback
+        const isSvgToRaster =
+          row.kind === 'svg-with-raster' &&
+          (spec.format === 'webp' || spec.format === 'avif');
+        const isOutdated =
+          isSvgToRaster &&
+          (existingRow.converterVersion || 1) < SVG_CONVERTER_VERSION;
+
+        if (onDisk && !isOutdated) continue;
+
+        if (isOutdated) {
+          this.logger.log(
+            `Regenerating '${spec.key}' for ${relativePath} (converter v${existingRow.converterVersion || 1} → v${SVG_CONVERTER_VERSION})`
+          );
+        }
+
         await this.generateVariant(row, fullSourcePath, spec, existingRow.id);
         restored++;
-        this.logger.log(`Restored missing cache variant '${spec.key}' for ${relativePath}`);
+        if (!isOutdated) {
+          this.logger.log(
+            `Restored missing cache variant '${spec.key}' for ${relativePath}`
+          );
+        }
       } else {
         await this.generateVariant(row, fullSourcePath, spec);
         restored++;
       }
     }
     if (restored === 0) {
-      this.logger.log(`Unchanged, all ${specs.length} variant(s) already cached: ${relativePath}`);
+      this.logger.log(
+        `Unchanged, all ${specs.length} variant(s) already cached: ${relativePath}`
+      );
     }
   }
 
@@ -324,12 +403,40 @@ export class CacheService {
   }
 
   /** Re-checks every known source file (catches out-of-band cache-file deletions with
-   * no fs event), then prunes any cache dir left behind by a source file that's gone. */
+   * no fs event), then prunes any cache dir left behind by a source file that's gone.
+   * Files are processed in batches with progress logging. */
   async reconcileAll(): Promise<void> {
     const rows = await this.sourceFiles.find();
-    for (const row of rows) {
-      await this.reconcileSourceFile(row.relativePath);
+    const total = rows.length;
+
+    if (total === 0) {
+      this.logger.log('No files to reconcile');
+      return;
     }
+
+    this.logger.log(`Starting batch reconciliation of ${total} file(s)`);
+
+    const BATCH_SIZE = 10;
+    let processed = 0;
+
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, Math.min(i + BATCH_SIZE, rows.length));
+
+      // Process batch sequentially to avoid overwhelming the system
+      for (const row of batch) {
+        await this.reconcileSourceFile(row.relativePath);
+        processed++;
+      }
+
+      const percentDone = Math.round((processed / total) * 100);
+      this.logger.log(
+        `Reconciliation progress: ${processed}/${total} (${percentDone}%)`
+      );
+    }
+
+    this.logger.log(
+      `Batch reconciliation complete: ${total} file(s) processed`
+    );
     await this.pruneOrphanedCacheDirs();
   }
 
@@ -359,12 +466,16 @@ export class CacheService {
    * `unlink` event ever fired to trigger removeSourceFile's cleanup.
    */
   private async pruneOrphanedCacheDirs(): Promise<void> {
-    const known = new Set((await this.sourceFiles.find()).map((r) => r.relativePath));
+    const known = new Set(
+      (await this.sourceFiles.find()).map((r) => r.relativePath)
+    );
     const leaves = await this.listLeafCacheDirs(this.cacheFilesDir);
     for (const dir of leaves) {
       const relativePath = path.relative(this.cacheFilesDir, dir);
       if (!known.has(relativePath)) {
-        this.logger.log(`Pruning orphaned cache dir (no matching source file): ${relativePath}`);
+        this.logger.log(
+          `Pruning orphaned cache dir (no matching source file): ${relativePath}`
+        );
         await fs.rm(dir, { recursive: true, force: true });
       }
     }
@@ -393,7 +504,11 @@ export class CacheService {
    */
   async ensureVariant(
     relativePath: string,
-    request: { width?: number; format?: 'webp' | 'avif' | 'png' | 'jpeg'; quality?: number }
+    request: {
+      width?: number;
+      format?: 'webp' | 'avif' | 'png' | 'jpeg';
+      quality?: number;
+    }
   ): Promise<ResolvedVariant> {
     const fullSourcePath = this.fullPath(relativePath);
     await fs.access(fullSourcePath);
@@ -417,13 +532,25 @@ export class CacheService {
       // see SvgService.flattenToRaster): everything else about an .svg path still
       // defaults to serving the vector/embedded-raster shell.
       const wantsSvgFlattenedToRaster =
-        isSvg && row.kind === 'svg-with-raster' && (request.format === 'webp' || request.format === 'avif');
+        isSvg &&
+        row.kind === 'svg-with-raster' &&
+        (request.format === 'webp' || request.format === 'avif');
 
       const spec: VariantSpec = isVector
-        ? { key: 'vector', format: 'vector', width: null, quality: null, ext: 'svg' }
+        ? {
+            key: 'vector',
+            format: 'vector',
+            width: null,
+            quality: null,
+            ext: 'svg'
+          }
         : wantsSvgFlattenedToRaster
           ? {
-              key: this.hasher.variantKey({ w: request.width, f: request.format, q: request.quality ?? DEFAULT_QUALITY }),
+              key: this.hasher.variantKey({
+                w: request.width,
+                f: request.format,
+                q: request.quality ?? DEFAULT_QUALITY
+              }),
               format: request.format!,
               width: request.width ?? BREAKPOINTS[0],
               quality: request.quality ?? DEFAULT_QUALITY,
@@ -438,14 +565,20 @@ export class CacheService {
                 ext: 'svg'
               }
             : {
-                key: this.hasher.variantKey({ w: request.width, f: request.format, q: request.quality ?? DEFAULT_QUALITY }),
+                key: this.hasher.variantKey({
+                  w: request.width,
+                  f: request.format,
+                  q: request.quality ?? DEFAULT_QUALITY
+                }),
                 format: request.format ?? 'webp',
                 width: request.width ?? null,
                 quality: request.quality ?? DEFAULT_QUALITY,
                 ext: request.format ?? 'webp'
               };
 
-      let variant = await this.variants.findOne({ where: { sourceFileId: row.id, variantKey: spec.key } });
+      let variant = await this.variants.findOne({
+        where: { sourceFileId: row.id, variantKey: spec.key }
+      });
       if (variant) {
         const filePath = path.join(this.cacheFilesDir, variant.filename);
         if (await fileExists(filePath)) {
@@ -459,8 +592,15 @@ export class CacheService {
         }
       }
 
-      this.logger.log(`Cache miss '${spec.key}' for ${relativePath}, generating on request`);
-      variant = await this.generateVariant(row, fullSourcePath, spec, variant?.id);
+      this.logger.log(
+        `Cache miss '${spec.key}' for ${relativePath}, generating on request`
+      );
+      variant = await this.generateVariant(
+        row,
+        fullSourcePath,
+        spec,
+        variant?.id
+      );
       const filePath = path.join(this.cacheFilesDir, variant.filename);
       return {
         buffer: await fs.readFile(filePath),

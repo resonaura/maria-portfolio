@@ -11,8 +11,10 @@ export interface EmbeddedRaster {
 }
 
 const IMAGE_TAG_RE = /<image\s+([^>]*?)>/gi;
-const DATA_URI_RE = /(?:href|xlink:href)=["'](data:(image\/\w+);base64,([^"'\s]+))["']/i;
-const VIEWBOX_RE = /viewBox=["']\s*([0-9.-]+)[\s,]+([0-9.-]+)[\s,]+([0-9.-]+)[\s,]+([0-9.-]+)\s*["']/i;
+const DATA_URI_RE =
+  /(?:href|xlink:href)=["'](data:(image\/\w+);base64,([^"'\s]+))["']/i;
+const VIEWBOX_RE =
+  /viewBox=["']\s*([0-9.-]+)[\s,]+([0-9.-]+)[\s,]+([0-9.-]+)[\s,]+([0-9.-]+)\s*["']/i;
 const WIDTH_RE = /\bwidth=["']\s*([0-9.]+)(?:px)?\s*["']/i;
 const HEIGHT_RE = /\bheight=["']\s*([0-9.]+)(?:px)?\s*["']/i;
 
@@ -35,14 +37,20 @@ export class SvgService {
     while ((match = IMAGE_TAG_RE.exec(svgContent)) !== null) {
       const uriMatch = DATA_URI_RE.exec(match[0]);
       if (uriMatch) {
-        rasters.push({ dataUri: uriMatch[1], mime: uriMatch[2], base64: uriMatch[3] });
+        rasters.push({
+          dataUri: uriMatch[1],
+          mime: uriMatch[2],
+          base64: uriMatch[3]
+        });
       }
     }
     return rasters;
   }
 
   classify(svgContent: string): 'svg-vector' | 'svg-with-raster' {
-    return this.findEmbeddedRasters(svgContent).length > 0 ? 'svg-with-raster' : 'svg-vector';
+    return this.findEmbeddedRasters(svgContent).length > 0
+      ? 'svg-with-raster'
+      : 'svg-vector';
   }
 
   /**
@@ -50,7 +58,11 @@ export class SvgService {
    * Uses replaceAll on the exact original data URI: if two <image> tags embed byte-identical
    * raster payloads, both must be replaced, not just the first match.
    */
-  async optimizeEmbeddedRasters(svgContent: string, targetWidth: number, quality = 80): Promise<string> {
+  async optimizeEmbeddedRasters(
+    svgContent: string,
+    targetWidth: number,
+    quality = 80
+  ): Promise<string> {
     const rasters = this.findEmbeddedRasters(svgContent);
     let result = svgContent;
 
@@ -61,12 +73,17 @@ export class SvgService {
         const origWidth = meta.width ?? targetWidth;
         const newWidth = Math.min(targetWidth, origWidth);
 
-        const format = raster.mime.includes('jpeg') || raster.mime.includes('jpg') ? 'jpeg' : 'webp';
+        const format =
+          raster.mime.includes('jpeg') || raster.mime.includes('jpg')
+            ? 'jpeg'
+            : 'webp';
         // smartSubsample/mozjpeg spend extra encode time preserving chroma detail at
         // sharp edges (text, thin lines) instead of subsampling uniformly — that's
         // where lossy compression visibly smears text first.
         const formatOptions =
-          format === 'webp' ? { quality, smartSubsample: true } : { quality, mozjpeg: true };
+          format === 'webp'
+            ? { quality, smartSubsample: true }
+            : { quality, mozjpeg: true };
         const optimizedBuffer = await sharp(buffer)
           .resize({ width: newWidth, withoutEnlargement: true })
           .toFormat(format, formatOptions)
@@ -75,7 +92,9 @@ export class SvgService {
         const newDataUri = `data:image/${format};base64,${optimizedBuffer.toString('base64')}`;
         result = result.replaceAll(raster.dataUri, newDataUri);
       } catch (error) {
-        this.logger.error(`Failed to optimize embedded raster: ${(error as Error).message}`);
+        this.logger.error(
+          `Failed to optimize embedded raster: ${(error as Error).message}`
+        );
       }
     }
 
@@ -98,17 +117,19 @@ export class SvgService {
           name: 'preset-default',
           params: {
             overrides: {
-              cleanupIds: { preservePrefixes: ['ring-', 'cta-'] },
-            },
-          },
+              cleanupIds: { preservePrefixes: ['ring-', 'cta-'] }
+            }
+          }
         },
         'removeScripts',
-        { name: 'removeAttrs', params: { attrs: 'on\\w+' } },
+        { name: 'removeAttrs', params: { attrs: 'on\\w+' } }
       ];
       const result = optimize(svgContent, { multipass: true, plugins });
       return result.data;
     } catch (error) {
-      this.logger.error(`SVGO optimization failed, serving unminified: ${(error as Error).message}`);
+      this.logger.error(
+        `SVGO optimization failed, serving unminified: ${(error as Error).message}`
+      );
       return svgContent;
     }
   }
@@ -130,6 +151,8 @@ export class SvgService {
    * its default 72dpi — for an 18000-wide viewBox that's a ~254MP decode before any
    * resize happens. `density` is scaled down so the native decode lands close to
    * targetWidth directly, and the trailing resize only needs to correct rounding.
+   *
+   * V2 improvements: increased DPI for sharper text rendering, better font hinting.
    */
   async flattenToRaster(
     svgContent: string,
@@ -138,23 +161,40 @@ export class SvgService {
     quality: number,
     format: 'webp' | 'avif'
   ): Promise<Buffer> {
-    const viewBoxWidth = intrinsic.w && intrinsic.w > 0 ? intrinsic.w : targetWidth;
-    // +15% headroom, unrounded: density is a DPI passed straight to librsvg, which
-    // rounds pixel dimensions internally — rounding here too (or landing exactly on
-    // targetWidth) risks the native decode coming out a hair under targetWidth,
-    // which withoutEnlargement below would then leave uncorrected and soft.
-    const density = Math.max(0.1, (72 * targetWidth * 1.15) / viewBoxWidth);
+    // Inject text-rendering optimization into SVG before rasterization to fix spacing
+    // and font rendering issues in librsvg. This ensures consistent letter spacing
+    // and proper font hinting.
+    let optimizedSvg = svgContent;
+    if (!svgContent.includes('text-rendering')) {
+      optimizedSvg = svgContent.replace(
+        /<svg([^>]*)>/i,
+        '<svg$1 style="text-rendering: geometricPrecision; shape-rendering: geometricPrecision;">'
+      );
+    }
 
-    const pipeline = sharp(Buffer.from(svgContent, 'utf-8'), { density }).resize({
+    const viewBoxWidth =
+      intrinsic.w && intrinsic.w > 0 ? intrinsic.w : targetWidth;
+    // V2: Increased headroom from 15% to 25% and use higher base DPI (96 instead of 72)
+    // for significantly better text rendering. librsvg's text layout is DPI-dependent,
+    // and the old 72dpi was causing inconsistent letter spacing.
+    const density = Math.max(0.1, (96 * targetWidth * 1.25) / viewBoxWidth);
+
+    const pipeline = sharp(Buffer.from(optimizedSvg, 'utf-8'), {
+      density
+    }).resize({
       width: targetWidth,
-      withoutEnlargement: true
+      withoutEnlargement: true,
+      // Use Lanczos3 for better text sharpness after resize
+      kernel: 'lanczos3'
     });
 
     // effort 4 instead of the optimizer's usual 6: at the top breakpoints this is a
     // ~250MP-viewBox decode, and encode effort 6 buys ~1% smaller output for nearly
     // 3x the time on a path that's already synchronous on a cache-miss request.
     return format === 'avif'
-      ? pipeline.avif({ quality, effort: 4, chromaSubsampling: '4:4:4' }).toBuffer()
+      ? pipeline
+          .avif({ quality, effort: 4, chromaSubsampling: '4:4:4' })
+          .toBuffer()
       : pipeline.webp({ quality, effort: 4, smartSubsample: true }).toBuffer();
   }
 

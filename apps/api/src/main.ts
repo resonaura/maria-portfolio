@@ -1,13 +1,25 @@
-import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { ConfigService } from '@nestjs/config';
 import compress from '@fastify/compress';
+import { ConfigService } from '@nestjs/config';
+import { NestFactory } from '@nestjs/core';
+import {
+  FastifyAdapter,
+  NestFastifyApplication
+} from '@nestjs/platform-fastify';
+import 'reflect-metadata';
 import { AppModule } from './app.module.js';
 import { AppConfig } from './config.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter({ logger: true }));
+  // Configure Fastify logger to output to stdout for PM2 compatibility
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter({
+      logger: {
+        level: 'info',
+        stream: process.stdout
+      }
+    })
+  );
 
   const config = app.get(ConfigService<AppConfig, true>);
 
@@ -26,7 +38,9 @@ async function bootstrap() {
   const host = config.get('HOST', { infer: true });
   await app.listen(port, host);
   // eslint-disable-next-line no-console
-  console.log(`[Server] Image Optimization Engine running at http://${host}:${port}`);
+  console.log(
+    `[Server] Image Optimization Engine running at http://${host}:${port}`
+  );
 }
 
 bootstrap();

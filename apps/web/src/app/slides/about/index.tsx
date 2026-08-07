@@ -1,9 +1,14 @@
-import { Mail } from 'lucide-react';
-import { motion, Variants } from 'framer-motion';
 import { Button } from '@heroui/react';
-import { Slide } from '../../components/slide';
+import { motion, Variants } from 'framer-motion';
+import { Mail } from 'lucide-react';
 import { skills } from '../../../content/skills';
-import { easeOut, staggerContainer, tapScale, viewportOnce } from '../../lib/motion';
+import { Slide } from '../../components/slide';
+import {
+  easeOut,
+  staggerContainer,
+  tapScale,
+  viewportOnce
+} from '../../lib/motion';
 
 import './index.scss';
 
@@ -17,11 +22,11 @@ export function AboutSlide() {
 
         <p>
           Hey, my name is Maria Kharitonova and I'm a{' '}
-          <strong>graphic designer</strong> and an <strong>illustrator</strong>{' '}
-          with 3+ years of experience. I endeavored in some forms of art or
-          creativity since I was a child. Even then, I knew that it is my
-          calling. As long as I can remember myself, I was always drawing
-          something on notebook margins, the pavement and even clothes.
+          <strong>graphic designer</strong> and an <strong>illustrator</strong>.
+          I endeavored in some forms of art or creativity since I was a child.
+          Even then, I knew that it is my calling. As long as I can remember
+          myself, I was always drawing something on notebook margins, the
+          pavement and even clothes.
         </p>
 
         <p>
@@ -55,7 +60,10 @@ export function AboutSlide() {
             // at once was flaky in Safari, firing maybe half the time).
             const barVariants: Variants = {
               hidden: { width: 0 },
-              visible: { width: `${skill.level}%`, transition: { duration: 0.8, ease: easeOut } }
+              visible: {
+                width: `${skill.level}%`,
+                transition: { duration: 0.8, ease: easeOut }
+              }
             };
             return (
               <div className='skill' key={skill.name}>
@@ -64,7 +72,10 @@ export function AboutSlide() {
                   <span>{skill.name}</span>
                 </div>
                 <div className='skill-bar'>
-                  <motion.div className='skill-bar-fill' variants={barVariants} />
+                  <motion.div
+                    className='skill-bar-fill'
+                    variants={barVariants}
+                  />
                 </div>
               </div>
             );
@@ -72,7 +83,10 @@ export function AboutSlide() {
         </motion.div>
 
         <div className='actions'>
-          <a href='mailto:mkrotova444@gmail.com' style={{ textDecoration: 'none' }}>
+          <a
+            href='mailto:mkrotova444@gmail.com'
+            style={{ textDecoration: 'none' }}
+          >
             <MotionButton
               variant='outline'
               data-cursor='block'
@@ -88,4 +102,3 @@ export function AboutSlide() {
     </Slide>
   );
 }
-
