@@ -152,7 +152,7 @@ export class SvgService {
    * resize happens. `density` is scaled down so the native decode lands close to
    * targetWidth directly, and the trailing resize only needs to correct rounding.
    *
-   * V2 improvements: increased DPI for sharper text rendering, better font hinting.
+   * V3 improvements: higher DPI + optimizeLegibility for better cross-platform text.
    */
   async flattenToRaster(
     svgContent: string,
@@ -161,31 +161,45 @@ export class SvgService {
     quality: number,
     format: 'webp' | 'avif'
   ): Promise<Buffer> {
-    // Inject text-rendering optimization into SVG before rasterization to fix spacing
-    // and font rendering issues in librsvg. This ensures consistent letter spacing
-    // and proper font hinting.
+    // Inject text-rendering optimization for better text on Linux servers.
+    // Check if SVG already has a style attribute to avoid duplication.
     let optimizedSvg = svgContent;
     if (!svgContent.includes('text-rendering')) {
-      optimizedSvg = svgContent.replace(
-        /<svg([^>]*)>/i,
-        '<svg$1 style="text-rendering: geometricPrecision; shape-rendering: geometricPrecision;">'
-      );
+      const svgTagMatch = svgContent.match(/<svg([^>]*)>/i);
+      if (svgTagMatch) {
+        const svgTag = svgTagMatch[0];
+        const hasStyleAttr = /\sstyle\s*=/i.test(svgTag);
+
+        if (hasStyleAttr) {
+          // Merge with existing style attribute
+          optimizedSvg = svgContent.replace(
+            /(<svg[^>]*\sstyle\s*=\s*["'])([^"']*)/i,
+            '$1$2; text-rendering: optimizeLegibility; shape-rendering: crispEdges'
+          );
+        } else {
+          // Add new style attribute
+          optimizedSvg = svgContent.replace(
+            /<svg([^>]*)>/i,
+            '<svg$1 style="text-rendering: optimizeLegibility; shape-rendering: crispEdges;">'
+          );
+        }
+      }
     }
 
     const viewBoxWidth =
       intrinsic.w && intrinsic.w > 0 ? intrinsic.w : targetWidth;
-    // V2: Increased headroom from 15% to 25% and use higher base DPI (96 instead of 72)
-    // for significantly better text rendering. librsvg's text layout is DPI-dependent,
-    // and the old 72dpi was causing inconsistent letter spacing.
-    const density = Math.max(0.1, (96 * targetWidth * 1.25) / viewBoxWidth);
+    // V3: Use 120 DPI (vs 96 or 72) for sharper text that survives downscaling better.
+    // 30% headroom ensures we always render slightly larger than target, then sharp
+    // downscales with high-quality kernel = crisp text even on Linux servers.
+    const density = Math.max(0.1, (120 * targetWidth * 1.3) / viewBoxWidth);
 
     const pipeline = sharp(Buffer.from(optimizedSvg, 'utf-8'), {
       density
     }).resize({
       width: targetWidth,
       withoutEnlargement: true,
-      // Use Lanczos3 for better text sharpness after resize
-      kernel: 'lanczos3'
+      // Mitchell kernel is better for text than Lanczos3 (less ringing artifacts)
+      kernel: 'mitchell'
     });
 
     // effort 4 instead of the optimizer's usual 6: at the top breakpoints this is a

@@ -10,7 +10,12 @@ import { SourceFile, SourceFileKind } from '../database/source-file.entity.js';
 import { HasherService } from '../pipeline/hasher.service.js';
 import { OptimizerService } from '../pipeline/optimizer.service.js';
 import { SvgService } from '../pipeline/svg.service.js';
-import { BREAKPOINTS, DEFAULT_QUALITY, RASTER_FORMATS, SVG_CONVERTER_VERSION } from './constants.js';
+import {
+  BREAKPOINTS,
+  DEFAULT_QUALITY,
+  RASTER_FORMATS,
+  SVG_CONVERTER_VERSION
+} from './constants.js';
 import { ImageManifest, ResolvedVariant, VariantSpec } from './types.js';
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -77,13 +82,27 @@ export class CacheService {
       ];
     }
     if (kind === 'svg-with-raster') {
-      return BREAKPOINTS.map((width) => ({
+      // SVG variants (embedded raster optimized per breakpoint)
+      const svgSpecs = BREAKPOINTS.map((width) => ({
         key: this.hasher.variantKey({ w: width, f: 'svg' }),
         format: 'svg',
         width,
         quality: DEFAULT_QUALITY,
         ext: 'svg'
       }));
+
+      // Safari fallback: flattened webp renditions (SvgService.flattenToRaster)
+      // Only webp, not avif — Safari supports webp, and generating both would
+      // double the variant count for marginal benefit.
+      const safariSpecs: VariantSpec[] = BREAKPOINTS.map((width) => ({
+        key: this.hasher.variantKey({ w: width, f: 'webp' }),
+        format: 'webp' as const,
+        width,
+        quality: DEFAULT_QUALITY,
+        ext: 'webp'
+      }));
+
+      return [...svgSpecs, ...safariSpecs];
     }
     const specs: VariantSpec[] = [];
     for (const width of BREAKPOINTS) {
@@ -365,6 +384,15 @@ export class CacheService {
           isSvgToRaster &&
           (existingRow.converterVersion || 1) < SVG_CONVERTER_VERSION;
 
+        // Debug logging for SVG conversion version checks
+        if (isSvgToRaster) {
+          this.logger.debug(
+            `[SVG Converter] ${relativePath} variant '${spec.key}': ` +
+              `version=${existingRow.converterVersion || 1}, target=${SVG_CONVERTER_VERSION}, ` +
+              `outdated=${isOutdated}, onDisk=${onDisk}`
+          );
+        }
+
         if (onDisk && !isOutdated) continue;
 
         if (isOutdated) {
@@ -412,6 +440,30 @@ export class CacheService {
     if (total === 0) {
       this.logger.log('No files to reconcile');
       return;
+    }
+
+    // Log SVG→raster converter status before reconciliation
+    const svgWithRaster = rows.filter((r) => r.kind === 'svg-with-raster');
+    if (svgWithRaster.length > 0) {
+      this.logger.log(
+        `Found ${svgWithRaster.length} svg-with-raster file(s) that may need converter v${SVG_CONVERTER_VERSION} regeneration`
+      );
+      for (const sf of svgWithRaster) {
+        const variants = await this.variants.find({
+          where: { sourceFileId: sf.id }
+        });
+        const webpAvif = variants.filter(
+          (v) => v.format === 'webp' || v.format === 'avif'
+        );
+        const outdated = webpAvif.filter(
+          (v) => (v.converterVersion || 1) < SVG_CONVERTER_VERSION
+        );
+        if (outdated.length > 0) {
+          this.logger.log(
+            `  ${sf.relativePath}: ${outdated.length}/${webpAvif.length} variant(s) outdated (v${outdated[0].converterVersion || 1} < v${SVG_CONVERTER_VERSION})`
+          );
+        }
+      }
     }
 
     this.logger.log(`Starting batch reconciliation of ${total} file(s)`);
