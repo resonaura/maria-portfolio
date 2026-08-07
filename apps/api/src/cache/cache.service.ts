@@ -83,9 +83,9 @@ export class CacheService {
     }
     if (kind === 'svg-with-raster') {
       // SVG variants (embedded raster optimized per breakpoint)
-      const svgSpecs = BREAKPOINTS.map((width) => ({
+      const svgSpecs: VariantSpec[] = BREAKPOINTS.map((width) => ({
         key: this.hasher.variantKey({ w: width, f: 'svg' }),
-        format: 'svg',
+        format: 'svg' as const,
         width,
         quality: DEFAULT_QUALITY,
         ext: 'svg'
