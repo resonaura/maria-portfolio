@@ -277,7 +277,12 @@ const SvgRasterFallbackImage = forwardRef<
   { src, alt, aspectRatio, className = '', style = {} },
   forwardedRef
 ) {
-  const { ref: svgRef, intrinsic } = useProgressiveSvg(src, alt);
+  // geometryOnly: this shell is measured, never shown — the visible pixels come from
+  // the flattened raster below. Without it Safari also pulls every SVG breakpoint
+  // variant (the largest assets on the site) to feed an invisible element.
+  const { ref: svgRef, intrinsic } = useProgressiveSvg(src, alt, {
+    geometryOnly: true
+  });
   const {
     ref: rasterRef,
     src: targetSrc,

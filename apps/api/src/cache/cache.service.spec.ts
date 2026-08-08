@@ -302,4 +302,136 @@ describe('CacheService reconciliation', () => {
     expect(source!.contrastProfile).not.toBeNull();
     expect(source!.contrastProfile!.length).toBeGreaterThan(0);
   });
+
+  /** An svg-with-raster source: a vector shell wrapping one base64 <image>. */
+  async function writeFixtureSvgWithRaster(
+    relativePath: string,
+    background = { r: 200, g: 20, b: 20 }
+  ): Promise<void> {
+    const raster = await sharp({
+      create: { width: 32, height: 32, channels: 3, background }
+    })
+      .png()
+      .toBuffer();
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="100%" height="100%">` +
+      `<image width="32" height="32" href="data:image/png;base64,${raster.toString('base64')}"/>` +
+      `</svg>`;
+    const fullPath = path.join(storageDir, relativePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, svg, 'utf-8');
+  }
+
+  /** A pre-rendered raster master alongside an SVG, per RASTER_MASTER_SUFFIX. */
+  async function writeMaster(
+    svgRelativePath: string,
+    background: { r: number; g: number; b: number }
+  ): Promise<void> {
+    const buffer = await sharp({
+      create: { width: 64, height: 64, channels: 3, background }
+    })
+      .png()
+      .toBuffer();
+    await fs.writeFile(path.join(storageDir, svgRelativePath + '.master.png'), buffer);
+  }
+
+  /** Mean per-channel colour of an encoded image, for asserting which source won. */
+  async function meanColour(buffer: Buffer) {
+    const { data } = await sharp(buffer).resize(1, 1, { fit: 'fill' }).raw().toBuffer({ resolveWithObject: true });
+    return { r: data[0], g: data[1], b: data[2] };
+  }
+
+  it('serves a precomputed Safari webp variant on first request rather than regenerating it', async () => {
+    // Regression guard: expectedVariantSpecs and ensureVariant have to compose the
+    // variantKey identically. When the precomputed spec omitted `q`, every Safari
+    // request missed a cache that already held the bytes and re-flattened the SVG
+    // synchronously — seconds per breakpoint, on a first page load.
+    await writeFixtureSvgWithRaster('arts/inline.svg');
+    await cacheService.reconcileSourceFile('arts/inline.svg');
+
+    const before = await variantRepo.count();
+    await cacheService.ensureVariant('arts/inline.svg', { width: 640, format: 'webp' });
+
+    expect(await variantRepo.count()).toBe(before);
+  });
+
+  it('downscales flattened renditions from a raster master when one sits next to the source', async () => {
+    // The master is green while the SVG's own embedded raster is red, so the colour
+    // of the result says unambiguously which one the pipeline actually read.
+    await writeFixtureSvgWithRaster('arts/mastered.svg', { r: 200, g: 20, b: 20 });
+    await writeMaster('arts/mastered.svg', { r: 20, g: 200, b: 20 });
+    await cacheService.reconcileSourceFile('arts/mastered.svg');
+
+    const result = await cacheService.ensureVariant('arts/mastered.svg', {
+      width: 320,
+      format: 'webp'
+    });
+
+    const colour = await meanColour(result.buffer);
+    expect(colour.g).toBeGreaterThan(colour.r);
+  });
+
+  it('still flattens the SVG itself when no master is present', async () => {
+    await writeFixtureSvgWithRaster('arts/unmastered.svg', { r: 200, g: 20, b: 20 });
+    await cacheService.reconcileSourceFile('arts/unmastered.svg');
+
+    const result = await cacheService.ensureVariant('arts/unmastered.svg', {
+      width: 320,
+      format: 'webp'
+    });
+
+    const colour = await meanColour(result.buffer);
+    expect(colour.r).toBeGreaterThan(colour.g);
+  });
+
+  it('invalidates cached variants when only the master changes', async () => {
+    await writeFixtureSvgWithRaster('arts/swapped.svg');
+    await writeMaster('arts/swapped.svg', { r: 20, g: 200, b: 20 });
+    await cacheService.reconcileSourceFile('arts/swapped.svg');
+    const first = await sourceRepo.findOne({ where: { relativePath: 'arts/swapped.svg' } });
+
+    // The .svg is untouched here — only the master is replaced. Its bytes are folded
+    // into contentHash precisely so this still counts as a content change.
+    await writeMaster('arts/swapped.svg', { r: 20, g: 20, b: 200 });
+    await cacheService.reconcileSourceFile('arts/swapped.svg');
+
+    const second = await sourceRepo.findOne({ where: { relativePath: 'arts/swapped.svg' } });
+    expect(second!.contentHash).not.toBe(first!.contentHash);
+
+    const result = await cacheService.ensureVariant('arts/swapped.svg', {
+      width: 320,
+      format: 'webp'
+    });
+    const colour = await meanColour(result.buffer);
+    expect(colour.b).toBeGreaterThan(colour.g);
+  });
+
+  it('does not index a raster master as a source file in its own right', async () => {
+    await writeFixtureSvgWithRaster('arts/owned.svg');
+    await writeMaster('arts/owned.svg', { r: 20, g: 200, b: 20 });
+
+    await cacheService.reconcileSourceFile('arts/owned.svg.master.png');
+
+    expect(
+      await sourceRepo.findOne({ where: { relativePath: 'arts/owned.svg.master.png' } })
+    ).toBeNull();
+  });
+
+  it('prunes a variant superseded by a change to how variant keys are composed', async () => {
+    await writeFixturePng('arts/rekeyed.png');
+    await cacheService.reconcileSourceFile('arts/rekeyed.png');
+
+    const victim = (await variantRepo.find({ where: { format: 'webp', width: 640 } }))[0];
+    expect(victim).toBeDefined();
+    // Stand in for a key produced by an older composition scheme: same format+width
+    // slot as an expected spec, but under a key nothing will ever look up again.
+    await variantRepo.update(victim.id, { variantKey: 'f=webp;w=640' });
+
+    await cacheService.reconcileSourceFile('arts/rekeyed.png');
+
+    expect(await variantRepo.findOne({ where: { variantKey: 'f=webp;w=640' } })).toBeNull();
+    expect(
+      await variantRepo.findOne({ where: { variantKey: 'f=webp;q=80;w=640' } })
+    ).not.toBeNull();
+  });
 });

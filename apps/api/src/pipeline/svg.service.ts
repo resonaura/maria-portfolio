@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import fs from 'node:fs/promises';
 import sharp from 'sharp';
 import { optimize, type PluginConfig } from 'svgo';
+import { RASTER_MASTER_SUFFIX } from '../cache/constants.js';
 import { IntrinsicSize } from './types.js';
 
 export interface EmbeddedRaster {
@@ -28,6 +29,27 @@ export class SvgService {
 
   async read(filePath: string): Promise<string> {
     return fs.readFile(filePath, 'utf-8');
+  }
+
+  /** Path an SVG's optional pre-rendered raster master would live at, whether or not it exists. */
+  masterPath(svgPath: string): string {
+    return `${svgPath}${RASTER_MASTER_SUFFIX}`;
+  }
+
+  /** True for a path that IS a master, rather than a source that may have one. */
+  isMasterPath(filePath: string): boolean {
+    return filePath.endsWith(RASTER_MASTER_SUFFIX);
+  }
+
+  /** The master's path if one has been placed next to `svgPath`, else null. */
+  async findMaster(svgPath: string): Promise<string | null> {
+    const candidate = this.masterPath(svgPath);
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      return null;
+    }
   }
 
   findEmbeddedRasters(svgContent: string): EmbeddedRaster[] {

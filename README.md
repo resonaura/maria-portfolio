@@ -67,6 +67,33 @@ SVGs are classified as `svg-vector` (pure vector) or `svg-with-raster` (has one 
   same SVGO pass. Intrinsic width/height are always read from the untouched source file
   before any optimization, never from a processed variant.
 
+`svg-with-raster` additionally gets a flattened `webp` per breakpoint, which is what Safari
+actually displays: it composites a raster `<image>` inside a live SVG through a permanently
+soft path regardless of source resolution, so a plain rasterized `<img>` is used instead.
+The inline SVG is still mounted there, invisible, because the id-based position hooks
+measure it with `getBBox()`/`getCTM()`.
+
+### Raster masters (pre-rendered PNGs)
+
+Those flattened renditions can be built from a pre-rendered PNG placed next to the source:
+`arts/1-1.svg` pairs with `arts/1-1.svg.master.png`. When one exists the server just
+downscales it; when it doesn't, the server rasterizes the SVG itself through librsvg, which
+costs seconds per variant and resolves fonts through the prod box's fontconfig rather than
+yours.
+
+```
+pnpm --filter @maria-portfolio/api masters   # --force, --width 3840, --only <substring>
+```
+
+Run it locally — the rendering machine's fonts are what get baked in, which is the whole
+point. A master exported by hand from Figma/Illustrator is equally valid (and preferable
+where a design tool renders effects librsvg doesn't support); the server only cares that a
+PNG exists at that path. Masters are committed alongside their sources so prod gets them
+with a plain `git pull`.
+
+Both files' bytes are folded into the source's `contentHash`, so replacing only the master
+still invalidates every cached variant and busts the client's `?v=` URL.
+
 ### Endpoints
 
 - `GET /img/*` — serves an optimized variant. Query params: `w` (target width), `dpr`

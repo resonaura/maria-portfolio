@@ -4,8 +4,22 @@ import { Interval } from '@nestjs/schedule';
 import { FSWatcher, watch } from 'chokidar';
 import { AppConfig } from '../config.js';
 import { CacheService } from '../cache/cache.service.js';
+import { RASTER_MASTER_SUFFIX } from '../cache/constants.js';
 
 const HOURLY_MS = 60 * 60 * 1000;
+
+/**
+ * Raster masters (see RASTER_MASTER_SUFFIX) are inputs to the .svg they sit next to,
+ * not sources in their own right — every event on one is rewritten into a reconcile
+ * of its owning SVG. They're deliberately NOT filtered out of the watch: dropping,
+ * replacing or deleting a master has to invalidate that SVG's cached variants, and
+ * an ignored path emits no event to trigger that.
+ */
+function toSourcePath(relativePath: string): string {
+  return relativePath.endsWith(RASTER_MASTER_SUFFIX)
+    ? relativePath.slice(0, -RASTER_MASTER_SUFFIX.length)
+    : relativePath;
+}
 
 /**
  * Watches storage/ for changes and drives cache reconciliation.
@@ -59,13 +73,24 @@ export class WatcherService implements OnModuleInit, OnModuleDestroy {
 
   private handleUpsert(event: 'add' | 'change', relativePath: string): void {
     this.logger.log(`fs ${event}: ${relativePath}`);
+    const sourcePath = toSourcePath(relativePath);
     this.cache
-      .reconcileSourceFile(relativePath)
-      .catch((error) => this.logger.error(`Failed to reconcile ${relativePath}: ${(error as Error).message}`));
+      .reconcileSourceFile(sourcePath)
+      .catch((error) => this.logger.error(`Failed to reconcile ${sourcePath}: ${(error as Error).message}`));
   }
 
   private handleUnlink(relativePath: string): void {
     this.logger.log(`fs unlink: ${relativePath}`);
+    // Losing a master doesn't remove the SVG — it falls back to server-side
+    // rasterization, so reconcile it rather than dropping it from the index.
+    if (relativePath.endsWith(RASTER_MASTER_SUFFIX)) {
+      const sourcePath = toSourcePath(relativePath);
+      this.logger.log(`Raster master removed, reverting ${sourcePath} to server-side rasterization`);
+      this.cache
+        .reconcileSourceFile(sourcePath)
+        .catch((error) => this.logger.error(`Failed to reconcile ${sourcePath}: ${(error as Error).message}`));
+      return;
+    }
     this.cache
       .removeSourceFile(relativePath)
       .catch((error) => this.logger.error(`Failed to remove ${relativePath}: ${(error as Error).message}`));

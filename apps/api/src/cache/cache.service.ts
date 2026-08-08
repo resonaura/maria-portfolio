@@ -94,8 +94,19 @@ export class CacheService {
       // Safari fallback: flattened webp renditions (SvgService.flattenToRaster)
       // Only webp, not avif — Safari supports webp, and generating both would
       // double the variant count for marginal benefit.
+      //
+      // The `q` component is load-bearing: ensureVariant looks these up by
+      // variantKey({ w, f, q }), so precomputing them without it files them under a
+      // key nothing ever reads. Every Safari request then missed a cache that did in
+      // fact hold the bytes, and regenerated them synchronously — seconds per
+      // breakpoint on a first page load, long enough for the browser to drop the
+      // request entirely.
       const safariSpecs: VariantSpec[] = BREAKPOINTS.map((width) => ({
-        key: this.hasher.variantKey({ w: width, f: 'webp' }),
+        key: this.hasher.variantKey({
+          w: width,
+          f: 'webp',
+          q: DEFAULT_QUALITY
+        }),
         format: 'webp' as const,
         width,
         quality: DEFAULT_QUALITY,
@@ -123,17 +134,51 @@ export class CacheService {
     return specs;
   }
 
+  /**
+   * Stat + hash inputs for a source, folding in its optional raster master.
+   *
+   * The stat pair stays a cheap "has anything changed" shortcut for skipping the
+   * rehash: summing both sizes and taking the newer mtime is sufficient, because
+   * adding, replacing or deleting a master always moves at least one of the two.
+   */
+  private async sourceFingerprint(fullSourcePath: string): Promise<{
+    size: number;
+    mtimeMs: number;
+    hashInputs: string[];
+  }> {
+    const stat = await this.hasher.stat(fullSourcePath);
+    const master =
+      path.extname(fullSourcePath).toLowerCase() === '.svg'
+        ? await this.svg.findMaster(fullSourcePath)
+        : null;
+    if (!master) return { ...stat, hashInputs: [fullSourcePath] };
+
+    const masterStat = await this.hasher.stat(master);
+    return {
+      size: stat.size + masterStat.size,
+      mtimeMs: Math.max(stat.mtimeMs, masterStat.mtimeMs),
+      hashInputs: [fullSourcePath, master]
+    };
+  }
+
   private async classifyAndDescribe(absolutePath: string, ext: string) {
-    const contrastProfile =
-      await this.optimizer.computeBrightnessProfile(absolutePath);
     if (ext === '.svg') {
       const content = await this.svg.read(absolutePath);
       const kind: SourceFileKind = this.svg.classify(content);
       const intrinsic = this.svg.getIntrinsicSize(content);
       const lqip =
         kind === 'svg-with-raster' ? await this.svg.generateLqip(content) : '';
+      // Sample brightness off the master when there is one: same pixels the client
+      // actually sees on the Safari path, and it avoids a full librsvg decode of the
+      // SVG (seconds) just to produce 32 averaged rows.
+      const master = await this.svg.findMaster(absolutePath);
+      const contrastProfile = await this.optimizer.computeBrightnessProfile(
+        master ?? absolutePath
+      );
       return { kind, intrinsic, lqip, contrastProfile };
     }
+    const contrastProfile =
+      await this.optimizer.computeBrightnessProfile(absolutePath);
     const intrinsic = await this.optimizer.getIntrinsicSize(absolutePath);
     const lqip = await this.optimizer.generateRasterLqip(absolutePath);
     return {
@@ -162,11 +207,29 @@ export class CacheService {
       return Buffer.from(optimized, 'utf-8');
     }
     // svg-with-raster explicitly requested as webp/avif (Safari fallback — see
-    // SvgService.flattenToRaster) flattens straight from the source SVG instead of
-    // going through the generic raster optimizer, which doesn't know how to size
-    // an SVG's native decode sanely.
+    // SvgService.flattenToRaster).
     const isSvgSource = path.extname(fullSourcePath).toLowerCase() === '.svg';
     if (isSvgSource && (spec.format === 'webp' || spec.format === 'avif')) {
+      // Preferred path: a pre-rendered raster master was placed next to the source
+      // (see RASTER_MASTER_SUFFIX), so this is a plain downscale — milliseconds, and
+      // with text rendered wherever the master was made rather than by the server's
+      // fontconfig. Falls through to server-side rasterization only when absent.
+      const master = await this.svg.findMaster(fullSourcePath);
+      if (master) {
+        const result = await this.optimizer.optimizeRaster(master, {
+          width: spec.width ?? undefined,
+          format: spec.format,
+          quality: spec.quality ?? DEFAULT_QUALITY,
+          // Same effort flattenToRaster settles on, for the same reason: these
+          // renditions are enormous (3840x9333 for 1-1.svg) and effort 6 costs 59s
+          // against 4.7s here for ~3% off the file size. The default 6 stays right
+          // for ordinary photo sources, which are an order of magnitude smaller.
+          effort: 4
+        });
+        return result.buffer;
+      }
+      // No master: rasterize the SVG here. Costs seconds per variant on a cache
+      // miss, so this is the fallback, not the intent — run the masters script.
       const content = await this.svg.read(fullSourcePath);
       const intrinsic = this.svg.getIntrinsicSize(content);
       return this.svg.flattenToRaster(
@@ -293,10 +356,17 @@ export class CacheService {
   }
 
   private async doReconcileSourceFile(relativePath: string): Promise<void> {
+    // A raster master is an input to its .svg, never a source file of its own —
+    // indexing it would give it a full variant set nothing ever requests.
+    if (this.svg.isMasterPath(relativePath)) {
+      this.logger.debug(`Skipping raster master as a source: ${relativePath}`);
+      return;
+    }
+
     const fullSourcePath = this.fullPath(relativePath);
-    let stat: { size: number; mtimeMs: number };
+    let stat: { size: number; mtimeMs: number; hashInputs: string[] };
     try {
-      stat = await this.hasher.stat(fullSourcePath);
+      stat = await this.sourceFingerprint(fullSourcePath);
     } catch {
       this.logger.warn(`Reconcile skipped, file vanished: ${relativePath}`);
       return; // file vanished between the fs event and this call
@@ -309,7 +379,7 @@ export class CacheService {
     const hash =
       row && row.size === stat.size && row.mtimeMs === stat.mtimeMs
         ? row.contentHash
-        : await this.hasher.hashContent(fullSourcePath);
+        : await this.hasher.hashFiles(stat.hashInputs);
 
     if (!row) {
       const { kind, intrinsic, lqip, contrastProfile } =
@@ -413,11 +483,49 @@ export class CacheService {
         restored++;
       }
     }
-    if (restored === 0) {
+
+    const pruned = await this.pruneShadowedVariants(row, specs, existing);
+
+    if (restored === 0 && pruned === 0) {
       this.logger.log(
         `Unchanged, all ${specs.length} variant(s) already cached: ${relativePath}`
       );
     }
+  }
+
+  /**
+   * Drops variants that cover the same format+width as an expected spec but sit under
+   * a different variantKey — the residue of a change to how keys are composed. The
+   * generation loop above only ever fills gaps, so without this the superseded rows
+   * (and their files) would survive every future sweep, unreadable and never evicted.
+   *
+   * Matching on format+width rather than "anything unexpected" is deliberate:
+   * ensureVariant legitimately creates variants for custom widths outside BREAKPOINTS,
+   * and those must survive a sweep instead of being deleted and regenerated in a loop.
+   */
+  private async pruneShadowedVariants(
+    row: SourceFile,
+    specs: VariantSpec[],
+    existing: CacheVariant[]
+  ): Promise<number> {
+    const expectedKeys = new Set(specs.map((s) => s.key));
+    const expectedSlots = new Set(specs.map((s) => `${s.format}@${s.width}`));
+
+    let pruned = 0;
+    for (const variant of existing) {
+      if (expectedKeys.has(variant.variantKey)) continue;
+      if (!expectedSlots.has(`${variant.format}@${variant.width}`)) continue;
+
+      this.logger.log(
+        `Pruning superseded variant '${variant.variantKey}' for ${row.relativePath}`
+      );
+      await this.variants.delete(variant.id);
+      await fs.rm(path.join(this.cacheFilesDir, variant.filename), {
+        force: true
+      });
+      pruned++;
+    }
+    return pruned;
   }
 
   async removeSourceFile(relativePath: string): Promise<void> {

@@ -4,6 +4,7 @@ import { useImgManifest } from './context.js';
 import { useDevicePixelRatio } from './useDevicePixelRatio.js';
 import { useElementWidth } from './useElementWidth.js';
 import { useNetworkQuality } from './useNetworkQuality.js';
+import { RETRY_DELAYS_MS } from './retry.js';
 
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
@@ -51,6 +52,18 @@ function patchImageHrefs(container: Element, nextSvgText: string): boolean {
 
 interface UseProgressiveSvgOptions {
   debounceMs?: number;
+  /**
+   * Mounts the LQIP shell and stops there — no breakpoint fetching at all.
+   *
+   * For the Safari path (ProgressiveImage's SvgRasterFallbackImage), where the inline
+   * SVG is never painted and exists only so getBBox()/getCTM() can locate marked spots
+   * in the artwork. That geometry comes from the viewBox and the vector shapes, both
+   * identical in every variant, so upgrading the embedded rasters changes nothing
+   * measurable — it just downloads the heaviest variants on the site (8.1MB across
+   * breakpoints for 1-1.svg) to feed an `opacity: 0` element, in the one browser that
+   * is already downloading a second, flattened copy of the same artwork to display.
+   */
+  geometryOnly?: boolean;
 }
 
 /**
@@ -63,7 +76,7 @@ interface UseProgressiveSvgOptions {
  */
 export function useProgressiveSvg(src: string, alt: string, options: UseProgressiveSvgOptions = {}) {
   const { manifest, isLoaded: manifestLoaded } = useImgManifest();
-  const { debounceMs = 300 } = options;
+  const { debounceMs = 300, geometryOnly = false } = options;
 
   const entry = manifest[src];
   const lqip = entry?.lqip ?? '';
@@ -110,13 +123,21 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
     root.setAttribute('role', 'img');
     root.setAttribute('aria-label', alt);
     root.style.display = 'block';
-    root.style.filter = 'blur(20px)';
-    root.style.transform = 'scale(1.1)';
-    root.style.transition = 'filter 0.6s ease, transform 0.6s ease';
+    // The blur/scale pair is the entry half of the progressive fade, undone once the
+    // first real variant lands. A geometry-only shell never fetches one, so applying
+    // them here would leave it permanently at scale(1.1) — and it is exactly this
+    // element that useSvgRectPosition/useSvgCirclePosition measure to place HTML over
+    // the artwork. Skip the cosmetics on a layer that is never painted anyway.
+    if (!geometryOnly) {
+      root.style.filter = 'blur(20px)';
+      root.style.transform = 'scale(1.1)';
+      root.style.transition = 'filter 0.6s ease, transform 0.6s ease';
+    }
 
     container.appendChild(document.importNode(root, true));
     shellReadyRef.current = true;
-  }, [src, lqip, alt]);
+    if (geometryOnly) setReady(true);
+  }, [src, lqip, alt, geometryOnly]);
 
   // Breakpoint upgrades: fetch as text, patch in place. Loads the 1x variant first
   // (much smaller than the full device-pixel-ratio one, so it's visibly sharper
@@ -124,6 +145,7 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
   // silently upgrades to the full-DPR variant — patching hrefs in place has no
   // reflow, so the upgrade is imperceptible other than becoming sharper.
   useEffect(() => {
+    if (geometryOnly) return;
     if (!manifestLoaded || containerWidth === null || !shellReadyRef.current) return;
     if (breakpoints.length === 0) return;
 
@@ -144,8 +166,14 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
     if (retinaBp <= appliedBpRef.current) return;
 
     const token = ++requestTokenRef.current;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
-    const applyVariant = (bp: number): Promise<boolean> =>
+    /**
+     * Fetches breakpoint `bp` and patches it in, retrying per RETRY_DELAYS_MS. A
+     * variant the server is still generating can take seconds and be dropped by the
+     * browser; without a retry the shell stays on its blurred LQIP permanently.
+     */
+    const applyVariant = (bp: number, attempt = 0): Promise<boolean> =>
       fetch(`/img/${src}?w=${bp}${suffix}`)
         .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
         .then((text) => {
@@ -155,13 +183,29 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
           const patched = patchImageHrefs(container, text);
           if (patched) appliedBpRef.current = Math.max(appliedBpRef.current, bp);
           return patched;
+        })
+        .catch((error) => {
+          if (token !== requestTokenRef.current) return false;
+          if (attempt >= RETRY_DELAYS_MS.length) throw error; // out of attempts
+          return new Promise<boolean>((resolve, reject) => {
+            timers.push(
+              setTimeout(() => {
+                if (token !== requestTokenRef.current) return resolve(false);
+                applyVariant(bp, attempt + 1).then(resolve, reject);
+              }, RETRY_DELAYS_MS[attempt])
+            );
+          });
         });
+
+    const clearPendingRetries = () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
 
     if (previewBp <= appliedBpRef.current) {
       // Already sharper than the preview tier from an earlier run — skip
       // straight to retina instead of regressing through it.
       applyVariant(retinaBp).catch(() => {});
-      return;
+      return clearPendingRetries;
     }
 
     applyVariant(previewBp)
@@ -190,9 +234,12 @@ export function useProgressiveSvg(src: string, alt: string, options: UseProgress
         return applyVariant(retinaBp).then(() => undefined);
       })
       .catch(() => {
-        // Source likely deleted/unreachable — keep whatever is already rendered.
+        // Retries exhausted — source likely deleted/unreachable. Keep whatever is
+        // already rendered rather than clearing to a broken state.
       });
-  }, [src, containerWidth, dpr, breakpoints, contentHash, isSlow, manifestLoaded]);
+
+    return clearPendingRetries;
+  }, [src, containerWidth, dpr, breakpoints, contentHash, isSlow, manifestLoaded, geometryOnly]);
 
   return { ref: setRef, ready, hasLqip: Boolean(lqip), intrinsic: entry?.intrinsic };
 }

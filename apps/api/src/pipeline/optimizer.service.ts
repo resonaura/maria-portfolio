@@ -24,17 +24,18 @@ export class OptimizerService {
 
     const format = options.format ?? 'webp';
     const quality = options.quality ?? 80;
+    const effort = options.effort ?? 6;
 
     if (format === 'avif') {
       // chromaSubsampling: '4:4:4' keeps full color resolution at sharp edges (text,
       // thin lines) — the default 4:2:0 halves it, which is where lossy compression
       // visibly smears text first, well before luma detail is affected.
-      pipeline.avif({ quality, effort: 6, chromaSubsampling: '4:4:4' });
+      pipeline.avif({ quality, effort, chromaSubsampling: '4:4:4' });
     } else if (format === 'webp') {
       // smartSubsample spends extra encode time finding better chroma placement
       // specifically around sharp edges instead of subsampling uniformly — same
       // goal as AVIF's 4:4:4 above, without doubling chroma data everywhere.
-      pipeline.webp({ quality, effort: 6, smartSubsample: true });
+      pipeline.webp({ quality, effort, smartSubsample: true });
     } else if (format === 'png') {
       pipeline.png({ quality, compressionLevel: 8 });
     } else {

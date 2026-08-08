@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { pickBreakpoint } from './breakpoint.js';
 import { useImgManifest } from './context.js';
+import { RETRY_DELAYS_MS } from './retry.js';
 import { useDevicePixelRatio } from './useDevicePixelRatio.js';
 import { useElementWidth } from './useElementWidth.js';
 import { useNetworkQuality } from './useNetworkQuality.js';
@@ -48,40 +49,56 @@ export function useProgressiveImage(src: string, options: UseProgressiveImageOpt
     // silently downgrade the displayed image back to a lower breakpoint.
     const token = ++requestTokenRef.current;
 
+    let cancelled = false;
+    const pending: HTMLImageElement[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    /**
+     * Preloads `url`, retrying on failure per RETRY_DELAYS_MS. A dropped request is
+     * usually a slow cache miss rather than a missing file, and giving up on the
+     * first error leaves this component pinned to its LQIP until a full reload —
+     * which is exactly the "only the blur ever appears" symptom in Safari.
+     */
+    const preload = (url: string, onLoad: () => void, attempt = 0): void => {
+      const img = new Image();
+      pending.push(img);
+      img.onload = () => {
+        if (cancelled || token !== requestTokenRef.current) return;
+        onLoad();
+      };
+      img.onerror = () => {
+        if (cancelled || token !== requestTokenRef.current) return;
+        if (attempt >= RETRY_DELAYS_MS.length) return; // out of attempts: keep the LQIP
+        timers.push(
+          setTimeout(() => {
+            if (!cancelled) preload(url, onLoad, attempt + 1);
+          }, RETRY_DELAYS_MS[attempt])
+        );
+      };
+      // Assigning src last means a synchronously-served cache hit still fires onload.
+      img.src = url;
+    };
+
     // 1x first — a much smaller download than the full device-pixel-ratio
     // variant, so it's visibly sharp (unlike the tiny LQIP) well before the
     // retina version would otherwise have arrived. Once it's up, silently
     // upgrade to the full-DPR version in the background; RasterProgressiveImage
     // crossfades the swap so it isn't a jarring pop.
-    const previewImg = new Image();
-    let retinaImg: HTMLImageElement | null = null;
-    previewImg.src = previewSrc;
-    previewImg.onload = () => {
-      if (token !== requestTokenRef.current) return;
+    preload(previewSrc, () => {
       setActiveSrc(previewSrc);
       setIsLoaded(true);
 
       if (retinaBp === previewBp) return; // 1x is already the best available size
 
-      retinaImg = new Image();
-      retinaImg.src = retinaSrc;
-      retinaImg.onload = () => {
-        if (token !== requestTokenRef.current) return;
-        setActiveSrc(retinaSrc);
-      };
-    };
-    previewImg.onerror = () => {
-      // Source likely missing/unreachable (e.g. deleted from storage) — leave
-      // whatever was last successfully shown (or the LQIP) in place rather than
-      // getting stuck or flashing a broken image.
-    };
+      preload(retinaSrc, () => setActiveSrc(retinaSrc));
+    });
 
     return () => {
-      previewImg.onload = null;
-      previewImg.onerror = null;
-      if (retinaImg) {
-        retinaImg.onload = null;
-        retinaImg.onerror = null;
+      cancelled = true;
+      for (const timer of timers) clearTimeout(timer);
+      for (const img of pending) {
+        img.onload = null;
+        img.onerror = null;
       }
     };
   }, [src, containerWidth, dpr, breakpoints, contentHash, isSlow, manifestLoaded, forceFormat]);
