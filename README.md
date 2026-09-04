@@ -10,6 +10,11 @@
 
 An interactive personal portfolio website designed and built for my friend, a visual designer.
 
+
+<p align="center">
+  <img src="media/maria-portfolio.png" width="800" alt="Maria Portfolio Website" />
+</p>
+
 🌐 **Live Website**: [https://maria.rsnra.link/](https://maria.rsnra.link/)
 
 ---
