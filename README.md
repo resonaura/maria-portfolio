@@ -1,11 +1,39 @@
-# maria-portfolio
+<img src="icon.svg" width="64" height="64" alt="Maria Portfolio Icon" />
 
-Monorepo (pnpm workspaces + Turborepo) for the portfolio frontend and its image-optimization backend.
+# Maria Portfolio
+
+[![Platform](https://img.shields.io/badge/Platform-Web-blue.svg)](apps/web)
+[![Frontend](https://img.shields.io/badge/Frontend-React%2019%20%7C%20Vite-61DAFB.svg?logo=react&logoColor=black)](apps/web)
+[![Engine](https://img.shields.io/badge/Image%20Engine-NestJS%20%7C%20Fastify%20%7C%20Sharp-E0234E.svg?logo=nestjs&logoColor=white)](apps/api)
+[![Monorepo](https://img.shields.io/badge/Monorepo-Turborepo%20%7C%20pnpm-EF4444.svg?logo=turborepo&logoColor=white)](package.json)
+[![Website](https://img.shields.io/badge/Website-maria.rsnra.link-8A2BE2.svg)](https://maria.rsnra.link/)
+
+An interactive personal portfolio website designed and built for my friend, a visual designer.
+
+🌐 **Live Website**: [https://maria.rsnra.link/](https://maria.rsnra.link/)
+
+---
+
+## 🎨 Architectural Rationale: Why a Custom Image Engine Instead of Next.js?
+
+While reaching for Next.js is common for web projects, choosing an independent, tailored architecture here was a deliberate engineering decision:
+
+- **The Right Tool for an Interactive SPA**: Next.js shines when server-side rendering (SSR) is strictly necessary for frequent dynamic page indexing or heavy SEO routing. For a fluid, state-driven designer portfolio SPA loaded with custom animations, full SSR adds server complexity and hydration overhead with little tangible benefit.
+- **Superior Image Processing Autonomy**: Rather than relying on generic middleware image optimizers, this project features a purpose-built NestJS/Fastify image engine (`apps/api`) powered by `sharp` and `better-sqlite3`. It provides:
+  - Automated content-hash deduplication (SHA-256).
+  - Breakpoint-aware AVIF/WebP generation.
+  - Hybrid raster/vector SVG classification and minification.
+  - Zero-latency serving with self-healing cache reconciliation.
+- **Dynamic Luminance / Brightness Map Header**: Because the portfolio features vibrant, continuous art backgrounds and heavy interactive visuals, the header utilizes an active **luminance map calculation**. As the user scrolls across diverse graphic artworks, the header elements dynamically adapt their contrast and text color in real time to match the background brightness underneath.
+
+---
+
+## 📦 Monorepo Architecture
 
 ```
-apps/web    React 19 + Vite frontend
-apps/api    NestJS + Fastify image-optimization service
-packages/img-client   Shared progressive-image React components/hooks, consumed by apps/web
+apps/web              React 19 + Vite frontend
+apps/api              NestJS + Fastify custom image-optimization service
+packages/img-client   Shared progressive-image React components & hooks
 ```
 
 ## Development
