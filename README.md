@@ -1,4 +1,4 @@
-<img src="https://raw.githubusercontent.com/resonaura/maria-portfolio/main/icon.svg" width="64" height="64" alt="Maria Portfolio Icon" />
+<img src="https://raw.githubusercontent.com/resonaura/maria-portfolio/main/icon.svg" width="64" alt="Maria Portfolio Icon" />
 
 # Maria Portfolio
 
