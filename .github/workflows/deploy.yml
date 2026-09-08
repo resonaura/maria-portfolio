@@ -1,0 +1,20 @@
+name: Deploy Maria Portfolio
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Update & Restart Services
+        run: |
+          cd /home/resonaura/apps/maria-portfolio
+          git pull
+          pnpm install
+          pnpm build
+          pm2 restart ecosystem.config.js
