@@ -26,6 +26,11 @@ export function isMobileDevice(): boolean {
 export function isLowPerformanceDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
 
+  // Desktops comfortably handle backdrop-filter compositing. Only apply
+  // low-performance heuristics on mobile devices to prevent false-positives
+  // (e.g. Safari Advanced Tracking Protection clamping hardwareConcurrency to 2 on macOS).
+  if (!isMobileDevice()) return false;
+
   const cores = navigator.hardwareConcurrency ?? 8;
   const memory = (navigator as INavigatorWithDeviceMemory).deviceMemory ?? 8;
 
